@@ -1,12 +1,14 @@
-# Mode Histoire
+# Bibliothèque française pour LLM — Mode Histoire
 
-Application d'index structuré et annoté des textes libres de droit en français, optimisée pour la lecture par des LLM (Large Language Models).
+Créer un index structuré et annoté des textes libres de droit en français, optimisé pour la lecture par des LLM (Large Language Models).
 
-Permet à un LLM (API OpenAI — modèle Cedar) de naviguer, lire et interpréter la littérature française du domaine public avec :
+## Objectif
+
+Permettre à un LLM (via API OpenAI — modèle Cedar) de naviguer, lire et interpréter la littérature française du domaine public avec :
 - Un index catégorisé par **genre, auteur, époque**
 - Des annotations de **personnages, tons, didascalies** pour le théâtre
-- Du texte nettoyé et formaté (Markdown structuré, JSONL)
-- Un format optimisé pour l'ingestion LLM
+- Du texte nettoyé et formaté (Markdown structuré, XML léger ou JSONL)
+- Un format optimisé pour l'ingestion LLM (pas de balisage lourd, métadonnées intégrées)
 
 ## Sources identifiées
 
@@ -14,15 +16,15 @@ Permet à un LLM (API OpenAI — modèle Cedar) de naviguer, lire et interpréte
 |--------|---------|--------|---------|--------|
 | **Common Corpus (Pleias)** | Littérature + presse + docs officiels | 110B mots | Bonne (curé) | ✅ Disponible |
 | **French-PD-Books (Pleias)** | Livres (Gallica) | 289k titres, 16,4B mots | OCR à corriger | ✅ Disponible |
-| **DraCor — fre** | Théâtre français XVIe-XXe | 1 560 pièces | Excellente (TEI) | ✅ API REST |
+| **DraCor — fre** | Théâtre français XVIe-XXe | 1560 pièces | Excellente (TEI) | ✅ API REST |
 | **Wikisource** | Littérature française validée | ~50k textes | Excellente (humains) | ✅ API MediaWiki |
 | **Project Gutenberg** | Littérature française | ~40k titres | Bonne (PD US) | ⚠️ Vérifier PD France |
-| **Ebooks libres et gratuits** | Classiques français | ~2 500 titres | Bonne | ❌ Pas d'API |
+| **Ebooks libres et gratuits** | Classiques français | ~2500 titres | Bonne | ❌ Pas d'API |
 
-## Architecture
+## Architecture proposée
 
 ```
-Mode Histoire/
+bibliotheque-francaise-llm/
 ├── index/              # Index des œuvres (Parquet/JSONL)
 ├── sources/            # Scripts d'extraction par source
 ├── annotations/        # Schémas d'annotation (théâtre, dialogues)
