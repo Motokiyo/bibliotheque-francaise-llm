@@ -1,44 +1,31 @@
-# Mode Histoire
+# Mode Histoire — Bibliothèque française pour LLM
 
-Application d'index structuré et annoté des textes libres de droit en français, optimisée pour la lecture par des LLM (Large Language Models).
+Index structuré et annoté des textes français libres de droit, optimisé pour ingestion par un Large Language Model.
 
-Permet à un LLM (API OpenAI — modèle Cedar) de naviguer, lire et interpréter la littérature française du domaine public avec :
-- Un index catégorisé par **genre, auteur, époque**
-- Des annotations de **personnages, tons, didascalies** pour le théâtre
-- Du texte nettoyé et formaté (Markdown structuré, JSONL)
-- Un format optimisé pour l'ingestion LLM
+Projet R&D Eiffel AI.
 
-## Sources identifiées
+## Entrée rapide
 
-| Source | Contenu | Taille | Qualité | Statut |
-|--------|---------|--------|---------|--------|
-| **Common Corpus (Pleias)** | Littérature + presse + docs officiels | 110B mots | Bonne (curé) | ✅ Disponible |
-| **French-PD-Books (Pleias)** | Livres (Gallica) | 289k titres, 16,4B mots | OCR à corriger | ✅ Disponible |
-| **DraCor — fre** | Théâtre français XVIe-XXe | 1 560 pièces | Excellente (TEI) | ✅ API REST |
-| **Wikisource** | Littérature française validée | ~50k textes | Excellente (humains) | ✅ API MediaWiki |
-| **Project Gutenberg** | Littérature française | ~40k titres | Bonne (PD US) | ⚠️ Vérifier PD France |
-| **Ebooks libres et gratuits** | Classiques français | ~2 500 titres | Bonne | ❌ Pas d'API |
+| Document | À lire si... |
+|----------|--------------|
+| [INDEX.md](INDEX.md) | tu cherches un fichier précis |
+| [STATE.md](STATE.md) | tu veux savoir où on en est |
+| [CLAUDE.md](CLAUDE.md) | tu démarres une session Claude Code |
+| [MODE_HISTOIRE.md](MODE_HISTOIRE.md) | tu veux la vision et la stratégie de sources |
+| [DECISIONS.md](DECISIONS.md) | tu cherches ce qui a été validé ou abandonné |
+| [docs/audit-sources.md](docs/audit-sources.md) | tu veux le rapport d'audit complet (110B mots, formats, gaps) |
 
-## Architecture
+## Sources principales
 
-```
-Mode Histoire/
-├── index/              # Index des œuvres (Parquet/JSONL)
-├── sources/            # Scripts d'extraction par source
-├── annotations/        # Schémas d'annotation (théâtre, dialogues)
-├── formats/            # Spécifications des formats LLM-optimisés
-├── tools/              # Outils de conversion et nettoyage
-└── docs/               # Documentation
-```
+- **DraCor (fre)** : 1940 pièces de théâtre français annotées (TEI), licence CC BY-NC-SA 4.0.
+- **Common Corpus (Pleias)** : 110 milliards de mots français propres, Parquet.
+- **Wikisource** : ~50 000 textes relus par des humains.
 
-## Premières étapes
+## Statut
 
-1. Connecter l'API DraCor (1 560 pièces françaises annotées)
-2. Explorer Common Corpus (format Parquet, 110B mots français)
-3. Définir le schéma d'index (genre, auteur, époque, métadonnées)
-4. Définir le format d'annotation pour le théâtre (personnages, répliques, didascalies)
+Structure documentaire posée. Aucun code livré pour l'instant. Prochaine étape : pipeline DraCor TEI→JSON sur 3 pièces, voir [STATE.md](STATE.md).
 
 ## Licence
 
-Les textes sources sont du domaine public (sauf mention contraire).
-Les annotations et index produits par ce projet seront sous licence ouverte (CC-BY-SA ou équivalent).
+- Textes sources : licences d'origine (domaine public ou CC selon source).
+- Annotations et index produits : CC BY-SA, sauf parties dérivées de DraCor qui héritent du NC.

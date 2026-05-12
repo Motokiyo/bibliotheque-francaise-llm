@@ -80,12 +80,12 @@ Le format idéal pour ingestion LLM est le **Parquet** (standard HuggingFace Dat
 
 | Caractéristique | Valeur |
 |---|---|
-| **Pièces de théâtre** | **1 560** |
+| **Pièces de théâtre** | **1 940** (vérifié 2026-05-12 contre l'API metadata) |
 | **Période** | 1549–1947 |
 | **Format** | TEI XML → API JSON |
 | **Données disponibles** | Personnages, répliques, didascalies, actes/scènes, réseaux |
-| **Licence** | CC BY NC SA 4.0 |
-| **API** | REST complète, endpoints spécialisés |
+| **Licence** | **CC BY-NC-SA 4.0** — NC bloque l'usage commercial |
+| **API** | REST complète, endpoints spécialisés (mais structure scénique = TEI uniquement) |
 | **Package Python** | pydracor |
 
 ### 2.4 Autres datasets HF
@@ -180,9 +180,10 @@ colonnes:
 - Prêt à l'emploi
 
 ### Priorité 2 — DraCor (théâtre)
-- **1 560 pièces** avec annotations personnages/répliques/didascalies
+- **1 940 pièces** avec annotations personnages/répliques/didascalies
 - API REST, package Python pydracor
-- Peut être connecté au robot en un weekend
+- Peut être connecté au robot en un weekend pour le contenu textuel ; la structure scénique (actes, scènes, didascalies inline, destinataires) demande un parsing TEI complémentaire
+- ⚠️ Licence CC BY-NC-SA 4.0 — non commercial
 
 ### Priorité 3 — Wikisource (qualité)
 - Textes relus par des humains
