@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Secrets
+.env
+
+# DraCor cache (regenerated on demand from the API)
+sources/dracor-cache/
+
+# Claude Code workspace artefacts
+.claude/
