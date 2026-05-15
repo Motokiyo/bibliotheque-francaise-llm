@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "titre": "Mode Histoire — Index du Théâtre Français",
+    "source": "DraCor (dracor.org/fre)",
+    "licence": "CC BY NC SA 4.0",
+    "derniere_maj": "2026-05-06",
+    "total_pieces": 1940
+  },
+  "genres": {
+    "comedie": {
+      "description": "Pièces comiques, farces, vaudevilles",
+      "auteurs_principaux": ["Molière", "Marivaux", "Beaumarchais", "Feydeau", "Labiche", "Courteline", "Regnard", "Dancourt"],
+      "oeuvres_representatives": [
+        "moliere-tartuffe", "moliere-misanthrope", "moliere-avare", "moliere-bourgeois-gentilhomme",
+        "moliere-femmes-savantes", "moliere-fourberies-de-scapin", "moliere-malade-imaginaire",
+        "marivaux-jeu-de-l-amour-et-du-hasard", "marivaux-fausses-confidences",
+        "beaumarchais-barbier-de-seville", "regnard-joueur", "feydeau-billet-de-mille"
+      ]
+    },
+    "tragedie": {
+      "description": "Tragédies classiques",
+      "auteurs_principaux": ["Racine", "Corneille", "Voltaire", "Crébillon"],
+      "oeuvres_representatives": [
+        "racine-phedre", "racine-andromaque", "racine-britannicus", "racine-berenice",
+        "racine-iphigenie", "racine-athalie", "racine-bajazet",
+        "corneillep-cid", "corneillep-horace", "corneillep-cinna", "corneillep-polyeucte",
+        "corneillep-rodogune", "corneillep-menteur",
+        "corneillet-timocrate", "corneillet-ariane"
+      ]
+    },
+    "drame": {
+      "description": "Drames romantiques et modernes",
+      "auteurs_principaux": ["Hugo", "Musset", "Dumas", "Rostand"],
+      "oeuvres_representatives": [
+        "hugo-hernani", "hugo-ruy-blas", "musset-lorenzaccio", "musset-badine",
+        "rostand-cyrano", "zola-therese-raquin"
+      ]
+    },
+    "comedie-ballet": {
+      "description": "Comédies mêlées de musique et danse (Molière-Lully)",
+      "auteurs_principaux": ["Molière"],
+      "oeuvres_representatives": [
+        "moliere-bourgeois-gentilhomme", "moliere-malade-imaginaire", "moliere-amants-magnifiques",
+        "moliere-facheux", "moliere-psyche"
+      ]
+    },
+    "theatre-ancien": {
+      "description": "Théâtre médiéval, XVIe siècle, début XVIIe",
+      "auteurs_principaux": ["Jodelle", "Grévin", "Larivey", "Hardy", "Rotrou", "Du Ryer"],
+      "oeuvres_representatives": [
+        "jodelle-cleopatre", "rotrou-venceslas", "rotrou-saint-genest",
+        "du-ryer-scevole", "hardy-meleagre"
+      ]
+    }
+  },
+  "siecles": {
+    "16": {"label": "XVIe siècle (1550-1599)", "nb_pieces": 25},
+    "17": {"label": "XVIIe siècle (1600-1699)", "nb_pieces": 650},
+    "18": {"label": "XVIIIe siècle (1700-1799)", "nb_pieces": 480},
+    "19": {"label": "XIXe siècle (1800-1899)", "nb_pieces": 700},
+    "20": {"label": "XXe siècle (1900-1947)", "nb_pieces": 85}
+  }
+}

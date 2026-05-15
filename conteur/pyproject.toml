@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cedar-conteur"
+version = "0.1.0"
+description = "Cedar storyteller — portable Realtime adapter + French literature annotation interface"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.50.0",
+    "httpx>=0.27.0",
+    "numpy>=1.26.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

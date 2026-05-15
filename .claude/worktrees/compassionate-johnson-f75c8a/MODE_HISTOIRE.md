@@ -4,7 +4,7 @@ Créer un index structuré et annoté des textes libres de droit en français, o
 
 ## Objectif
 
-Permettre à un LLM (via API OpenAI Realtime — voix `cedar`) de naviguer, lire et interpréter la littérature française du domaine public avec :
+Permettre à un LLM (via API OpenAI — modèle Cedar) de naviguer, lire et interpréter la littérature française du domaine public avec :
 - Un index catégorisé par **genre, auteur, époque**
 - Des annotations de **personnages, tons, didascalies** pour le théâtre
 - Du texte nettoyé et formaté (Markdown structuré, XML léger ou JSONL)
@@ -25,27 +25,27 @@ Permettre à un LLM (via API OpenAI Realtime — voix `cedar`) de naviguer, lire
 
 ```
 bibliotheque-francaise-llm/
-├── README.md                    # Pointeur court
-├── MODE_HISTOIRE.md             # Ce document (vision et sources)
-├── conteur/                     # Banc de test Cedar storyteller (cœur vivant)
-│   ├── CLAUDE.md / INDEX.md / STATE.md / DECISIONS.md / KNOWLEDGE_BASE.md
-│   ├── src/cedar_conteur/       # Paquet portable (adapter, DSP, library, prompts, robot)
-│   └── standalone/              # FastAPI + UI vanilla
-├── index/                       # Schéma Parquet de l'index général
-├── sources/                     # Documentation des sources (DRACOR.md, COMMON_CORPUS.md)
-├── annotations/                 # Schémas + œuvres annotées (schema-theatre.md, oeuvres/*.json)
-├── data/                        # Index thématique DraCor (1940 pièces)
-└── docs/                        # Rapports d'audit (audit-sources.md)
+├── CLAUDE.md            # Garde-fous projet (lu à chaque session)
+├── INDEX.md             # Catalogue wiki, lu EN PREMIER
+├── STATE.md             # Snapshot projet (P0, blocages, decisions)
+├── DECISIONS.md         # Décisions validées et abandonnées
+├── README.md            # Pointeur court
+├── MODE_HISTOIRE.md     # Ce document (vision et sources)
+├── index/               # Index des œuvres (STRUCTURE.md, futurs Parquet/JSONL)
+├── sources/             # Documentation des sources (DRACOR.md, COMMON_CORPUS.md)
+├── annotations/         # Schémas d'annotation (schema-theatre.md)
+├── data/                # Données brutes (index-monde-histoire.json)
+└── docs/                # Rapports d'audit (audit-sources.md)
 ```
 
-Le sous-projet [conteur/](conteur/) est le premier consommateur de cette bibliothèque et concentre l'effort R&D actuel (mode histoire Cedar pour Reachy Mini).
+(`formats/` et `tools/` étaient annoncés mais n'existent pas encore. Ils seront créés à l'étape pipeline.)
 
 ## Premières étapes
 
-1. Connecter l'API DraCor (1 940 pièces françaises annotées, licence CC BY-NC-SA 4.0) — **fait dans `conteur/src/cedar_conteur/library.py`**
-2. Explorer Common Corpus (format Parquet, 110B mots français) — en attente
+1. Connecter l'API DraCor (1 940 pièces françaises annotées, licence CC BY-NC-SA 4.0)
+2. Explorer Common Corpus (format Parquet, 110B mots français)
 3. Définir le schéma d'index (genre, auteur, époque, métadonnées) — voir `index/STRUCTURE.md`
-4. Définir le format d'annotation pour le théâtre — voir `annotations/schema-theatre.md`
+4. Définir le format d'annotation pour le théâtre (personnages, répliques, didascalies) — voir `annotations/schema-theatre.md`
 
 ## ⚠️ Contraintes de licence
 

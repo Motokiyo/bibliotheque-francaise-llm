@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Cedar Conteur — Bibliothèque française pour LLM</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Cedar Conteur</h1>
+    <span id="status" class="status idle">idle</span>
+    <span id="model-badge"></span>
+  </header>
+
+  <main>
+    <aside class="library">
+      <h2>Bibliothèque</h2>
+      <input type="search" id="search" placeholder="filtrer par titre ou auteur" autocomplete="off">
+      <select id="genre-filter">
+        <option value="">tous genres</option>
+      </select>
+      <ul id="oeuvres-list"></ul>
+    </aside>
+
+    <section class="text-pane">
+      <h2 id="oeuvre-title">Choisis une œuvre</h2>
+      <p id="oeuvre-meta" class="meta"></p>
+      <details open>
+        <summary id="text-pane-summary">Texte complet de la pièce (clique sur un personnage de la liste à droite pour voir ses répliques par acte/scène)</summary>
+        <div id="oeuvre-text"></div>
+      </details>
+      <details>
+        <summary>Passage à lire (collable)</summary>
+        <textarea id="scene-text" rows="10" placeholder="Tu peux coller un passage ici, OU laisser vide et juste dire à Cedar à l'oral « lis-moi Acte I scène 3 » — Cedar appellera le tool load_scene tout seul."></textarea>
+        <div class="push-row">
+          <button id="push-scene" disabled>Pousser ce passage</button>
+          <button id="push-all" disabled>Pousser TOUTE la pièce</button>
+          <button id="continue-reading" disabled>Continuer (chunk suivant)</button>
+        </div>
+        <p class="hint">Cedar a accès à 3 tools : `load_scene(act,scene)`, `load_full_play()`, `list_scenes()`. Demande-lui à l'oral, il appellera tout seul.</p>
+      </details>
+    </section>
+
+    <aside class="annotations">
+      <h2>Annotations vocales</h2>
+      <p class="hint">Édite les indications de jeu par personnage. Sauvegarde et relance la session pour appliquer.</p>
+      <div id="personnages-edit"></div>
+      <button id="add-perso">+ ajouter un personnage</button>
+
+      <h3>Prononciations</h3>
+      <div id="prononciations-edit"></div>
+      <button id="add-pron">+ ajouter</button>
+
+      <h3>Notes globales</h3>
+      <textarea id="instructions-globales" rows="3" placeholder="ex: respecte la métrique de l'alexandrin, pose les rimes…"></textarea>
+
+      <button id="save-annot" class="primary">Sauvegarder annotations</button>
+    </aside>
+  </main>
+
+  <footer class="controls">
+    <div class="setting">
+      <label>Voix</label>
+      <select id="voice">
+        <option value="cedar" selected>cedar (recommandé conteur)</option>
+        <option value="marin">marin (clair, plus professionnel)</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label>Modèle</label>
+      <select id="model">
+        <option value="gpt-realtime" selected>gpt-realtime V1 (cedar chaud, recommandé)</option>
+        <option value="gpt-realtime-2">gpt-realtime-2 V2 (cedar rentrainé, reasoning, 128k)</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label>Reasoning</label>
+      <select id="reasoning">
+        <option value="minimal">minimal</option>
+        <option value="low">low</option>
+        <option value="medium" selected>medium</option>
+        <option value="high">high</option>
+        <option value="xhigh">xhigh</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label>Speed <span id="speed-val">0.92</span></label>
+      <input type="range" id="speed" min="0.7" max="1.3" step="0.01" value="0.92">
+    </div>
+    <div class="setting">
+      <label><input type="checkbox" id="preambles" checked> Préambules</label>
+    </div>
+    <div class="setting">
+      <label><input type="checkbox" id="dsp-enabled" checked> DSP par perso</label>
+    </div>
+    <div class="setting">
+      <label><input type="checkbox" id="robot-enabled" checked> Antennes Reachy</label>
+    </div>
+    <div class="actions">
+      <button id="start" class="primary" disabled>Commencer la lecture</button>
+      <button id="cancel" disabled>Interrompre</button>
+      <button id="stop" disabled>Arrêter</button>
+    </div>
+  </footer>
+
+  <div id="transcript" class="transcript">
+    <div class="line you"></div>
+    <div class="line cedar"></div>
+  </div>
+
+  <script src="/static/app.js" type="module"></script>
+</body>
+</html>

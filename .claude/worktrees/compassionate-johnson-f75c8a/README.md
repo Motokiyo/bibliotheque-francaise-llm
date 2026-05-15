@@ -8,10 +8,11 @@ Projet R&D Eiffel AI.
 
 | Document | À lire si... |
 |----------|--------------|
-| [MODE_HISTOIRE.md](MODE_HISTOIRE.md) | tu veux la vision, les sources et la stratégie |
-| [conteur/](conteur/) | tu travailles sur le banc de test Cedar (cœur vivant du projet) |
-| [conteur/INDEX.md](conteur/INDEX.md) | tu démarres une session Claude Code sur le conteur |
-| [conteur/STATE.md](conteur/STATE.md) | tu veux savoir où en est le conteur |
+| [INDEX.md](INDEX.md) | tu cherches un fichier précis |
+| [STATE.md](STATE.md) | tu veux savoir où on en est |
+| [CLAUDE.md](CLAUDE.md) | tu démarres une session Claude Code |
+| [MODE_HISTOIRE.md](MODE_HISTOIRE.md) | tu veux la vision et la stratégie de sources |
+| [DECISIONS.md](DECISIONS.md) | tu cherches ce qui a été validé ou abandonné |
 | [docs/audit-sources.md](docs/audit-sources.md) | tu veux le rapport d'audit complet (110B mots, formats, gaps) |
 
 ## Sources principales
@@ -22,7 +23,7 @@ Projet R&D Eiffel AI.
 
 ## Statut
 
-Le sous-projet [conteur/](conteur/) (banc de test mode histoire Cedar pour Reachy Mini) est le cœur R&D actuel. La couche bibliothèque (index, schémas, sources) sert le conteur en premier consommateur.
+Structure documentaire posée. Aucun code livré pour l'instant. Prochaine étape : pipeline DraCor TEI→JSON sur 3 pièces, voir [STATE.md](STATE.md).
 
 ## Licence
 
