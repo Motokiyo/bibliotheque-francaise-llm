@@ -47,9 +47,9 @@ Antennes Reachy : `set_perso_antennas` côté serveur (asyncio.to_thread).
 
 ## Référence canonique externe
 
-- **Bible vocale** : `/Users/alexandre/Galaad-Motokiyo-Ferran/IA/Modeles/openai-realtime-2-bible-vocale.md`
-- **MAP.md reachy_care** : `/Users/alexandre/Galaad-Motokiyo-Ferran/RD/Eiffel/reachy_care/app/MAP.md`
-- **VOIX_CEDAR_MODE_HISTOIRE** : `/Users/alexandre/Galaad-Motokiyo-Ferran/RD/Eiffel/reachy_care/app/docs/VOIX_CEDAR_MODE_HISTOIRE.md`
+- **Bible vocale** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/IA/Modeles/openai-realtime-2-bible-vocale.md`
+- **MAP.md reachy_care** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/reachy_care/app/MAP.md`
+- **VOIX_CEDAR_MODE_HISTOIRE** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/reachy_care/app/docs/VOIX_CEDAR_MODE_HISTOIRE.md`
 
 ## Reprise demain
 
