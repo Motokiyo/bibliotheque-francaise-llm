@@ -4,28 +4,47 @@
   <meta charset="utf-8">
   <title>Cedar Conteur — Bibliothèque française pour LLM</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20260610-2121">
 </head>
 <body>
   <header>
+    <button id="toggle-menu" class="toggle-menu" type="button" onclick="document.body.classList.toggle('menu-open');">Menu</button>
     <h1>Cedar Conteur</h1>
     <span id="status" class="status idle">idle</span>
     <span id="model-badge"></span>
+    <button id="toggle-annotations" type="button" onclick="const p=document.querySelector('.annotations'); if(p){p.style.display='block'; document.body.classList.add('annotations-visible'); document.body.classList.remove('annotations-hidden');}">Annotations</button>
   </header>
 
   <main>
     <aside class="library">
+      <button id="close-menu" class="close-menu" type="button" onclick="document.body.classList.remove('menu-open');">Fermer</button>
       <h2>Bibliothèque</h2>
       <input type="search" id="search" placeholder="filtrer par titre ou auteur" autocomplete="off">
       <select id="genre-filter">
         <option value="">tous genres</option>
       </select>
+      <h2>Livres</h2>
+      <ul id="books-list"></ul>
+      <h2>Théâtre</h2>
       <ul id="oeuvres-list"></ul>
     </aside>
 
     <section class="text-pane">
       <h2 id="oeuvre-title">Choisis une œuvre</h2>
       <p id="oeuvre-meta" class="meta"></p>
+      <div id="book-controls" class="book-controls" hidden>
+        <button id="toggle-player" class="toggle-player" type="button" title="Masquer le lecteur">Masquer</button>
+        <select id="chapter-select"></select>
+        <div class="player-buttons">
+          <button id="book-prev" title="Chapitre précédent" disabled>Précédent</button>
+          <button id="book-play" title="Démarrer / reprendre" disabled>Démarrer</button>
+          <button id="book-pause" title="Pause" disabled>Pause</button>
+          <button id="book-next" title="Chapitre suivant" disabled>Suivant</button>
+          <button id="book-stop" title="Arrêter" disabled>Stop</button>
+          <button id="book-from-selection" title="Reprendre depuis le texte sélectionné" disabled>Depuis sélection</button>
+        </div>
+        <span id="book-progress" class="book-progress"></span>
+      </div>
       <details open>
         <summary id="text-pane-summary">Texte complet de la pièce (clique sur un personnage de la liste à droite pour voir ses répliques par acte/scène)</summary>
         <div id="oeuvre-text"></div>
@@ -43,6 +62,7 @@
     </section>
 
     <aside class="annotations">
+      <button id="close-annotations" class="close-annotations" type="button" onclick="this.closest('.annotations').style.display='none';document.body.classList.add('annotations-hidden');document.body.classList.remove('annotations-visible');">Fermer</button>
       <h2>Annotations vocales</h2>
       <p class="hint">Édite les indications de jeu par personnage. Sauvegarde et relance la session pour appliquer.</p>
       <div id="personnages-edit"></div>
@@ -109,6 +129,6 @@
     <div class="line cedar"></div>
   </div>
 
-  <script src="/static/app.js" type="module"></script>
+  <script src="/static/app.js?v=20260610-2345" type="module"></script>
 </body>
 </html>

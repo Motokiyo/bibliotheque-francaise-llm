@@ -2,6 +2,28 @@
 
 ## VALIDÉ
 
+### 11/06/2026 — Lecture roman fiable via Realtime Cedar V1, segments courts anticipés
+
+Le mode livre long (*L'île au trésor*) passe par OpenAI Realtime `gpt-realtime` + voix `cedar` V1, pas par l'endpoint Speech REST. La clé Reachy/Pollen récupérée via `HuggingFaceM4/gradium_setup` fonctionne pour Realtime mais pas pour `/v1/audio/speech` (`missing_scope api.model.audio.request`).
+
+Architecture validée :
+- texte source local structuré en chapitres JSON ;
+- découpe déterministe en segments courts sur frontières de phrase/paragraphe ;
+- progression sauvegardée en offsets source dans `localStorage` ;
+- le segment suivant est demandé quand il reste environ 15 secondes d'audio local bufferisé, pour éviter un blanc audible ;
+- l'avancement livre ne dépend plus du transcript ni de `response.done` seul : le navigateur tient l'autorité de lecture réelle via Web Audio ;
+- bouton `Depuis sélection` reprend à l'offset source choisi sans snap arrière.
+
+Test 11/06/2026 : test Playwright mobile 90 s validant 3 segments successifs du chapitre I (`0→776`, `776→1476`, `1476→2112`), statut `speaking`, progression sauvegardée à `charOffset=1476`, sans erreur console.
+
+### 11/06/2026 — Déploiement pérenne : Vercel non recommandé pour cette version
+
+Le conteur actuel nécessite un process serveur persistant FastAPI/Uvicorn, WebSocket Realtime durable, Web Audio côté client, et une clé OpenAI côté serveur. Vercel n'est donc pas le déploiement cible pour la version actuelle.
+
+Déploiement recommandé : petit VPS, Fly.io, Render ou Railway avec Uvicorn persistant, HTTPS, variable `OPENAI_API_KEY`, volume/disque pour données locales et cache éventuel. Objectif : accès stable depuis Android sans dépendre de l'ordinateur d'Alexandre.
+
+Option compatible avec les sites existants d'Alexandre : si le site est servi par un vrai serveur (VPS, reverse proxy, Docker, Node/Python backend), déployer le conteur sur un sous-domaine ou chemin protégé par code d'accès, avec proxy WebSocket vers Uvicorn. Si le site est statique/serverless pur, il ne suffit pas pour cette version.
+
 ### 12/05/2026 SOIR — DSP browser-side via SoundTouch streaming worklet
 
 **Décision finale de la session** : abandon complet du DSP pyrubberband côté serveur, bascule vers un `AudioWorkletProcessor` streaming côté browser utilisant la lib `@soundtouchjs/audio-worklet@0.1.17`.

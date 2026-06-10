@@ -1,5 +1,30 @@
 # STATE — conteur (Cedar storyteller)
 
+## Snapshot 11/06/2026 — lecteur roman Cedar V1 multi-segments
+
+### Livré
+
+- `L'île au trésor` ajouté comme livre local JSON avec 34 chapitres.
+- UI mobile enrichie : menu bibliothèque à gauche, contrôles livre au centre, chapitre précédent/suivant, pause, stop, reprendre/démarrer, reprise depuis sélection.
+- Mode livre branché sur OpenAI Realtime `gpt-realtime` + voix `cedar` V1, pas sur Speech REST.
+- La lecture avance par segments courts exacts, avec progression `{chapterIndex, charOffset}` en `localStorage`.
+- Le segment suivant est demandé quand il reste environ 15 secondes d'audio bufferisé côté navigateur, pour éviter le blanc entre segments.
+- Test Playwright mobile 90 s : trois segments successifs validés sur le chapitre I (`0→776`, `776→1476`, `1476→2112`), statut `speaking`, progression sauvegardée `charOffset=1476`, pas d'erreur console.
+
+### Contraintes
+
+- La clé Reachy/Pollen récupérée via HF fonctionne pour Realtime mais pas pour `/v1/audio/speech` (`missing_scope api.model.audio.request`).
+- Ne pas déployer cette version sur Vercel statique/serverless pur : besoin d'un process Uvicorn persistant et de WebSocket long-lived.
+- Déploiement pérenne recommandé : VPS/Fly.io/Render/Railway ou site existant d'Alexandre si backend persistant + reverse proxy WebSocket + HTTPS + Basic Auth/code d'accès.
+- Vérification domaines 11/06 : `eiffelai.io` et `galaadmf.fr` pointent vers Infomaniak/Apache ; `leparede.org` est Apache/WordPress/Nextcloud sur `194.36.166.10` mais l'accès SSH connu ne passe pas, seulement FTP/statique confirmé ; serveur Hetzner `89.167.3.104` a déjà Nginx 80/443 et convient au backend persistant.
+
+### Suivant
+
+1. Déployer sur un hébergement accessible à la famille sans dépendre du Mac local.
+2. Ajouter auth simple avant exposition publique.
+3. Faire un test réel Android de 15-20 minutes sur plusieurs segments après déploiement.
+4. Ajouter les romans arthuriens de Chrétien de Troyes : `Perceval`, `Lancelot ou le Chevalier de la charrette`, `Yvain ou le Chevalier au lion`, puis `Érec et Énide` / `Cligès` si sources propres.
+
 ## Snapshot 12/05/2026 soir — pivot complet DSP browser-side
 
 ### Trajectoire de la session (4 versions successives)

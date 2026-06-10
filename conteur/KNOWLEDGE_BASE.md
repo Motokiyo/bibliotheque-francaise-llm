@@ -2,6 +2,37 @@
 
 Contraintes techniques validées terrain. Référence canonique pour tout projet voix d'Alexandre : `/4 Ressources/Outils-IA/Modeles/openai-realtime-2-bible-vocale.md`.
 
+## §0 — Lecture longue de livres avec Cedar V1
+
+Pour un roman long, ne pas demander à Realtime de "continuer" librement un chapitre entier. Le texte source est l'autorité.
+
+Pipeline validé le 11/06/2026 :
+1. charger le livre local en JSON (`chapters[]`) ;
+2. découper en segments courts par offsets source ;
+3. envoyer un segment exact à Realtime `gpt-realtime` + `cedar` ;
+4. planifier les chunks audio reçus dans Web Audio ;
+5. déclencher le segment suivant quand il reste environ 15 s d'audio bufferisé ;
+6. sauvegarder la progression par `{chapterIndex, charOffset}`.
+
+Interdits pour le mode livre :
+- avancer au chapitre/segment suivant uniquement sur `response.done` ;
+- estimer la progression à partir du transcript ;
+- utiliser l'endpoint Speech REST avec la clé Reachy/Pollen actuelle (`missing_scope api.model.audio.request`) ;
+- snapper vers le paragraphe précédent quand l'utilisateur choisit `Depuis sélection`.
+
+Test terrain automatisé : Playwright mobile 90 s, trois segments enchaînés sur *L'île au trésor* chapitre I, progression sauvegardée au-delà du segment 1, pas d'erreur console.
+
+## §0bis — Déploiement
+
+Vercel n'est pas adapté à cette version : FastAPI/Uvicorn + WebSocket Realtime long-lived + clé OpenAI serveur + état local. Cible pérenne : VPS/Fly.io/Render/Railway avec process persistant, HTTPS, variable `OPENAI_API_KEY`, domaine stable, et redémarrage supervisé.
+
+Un site existant d'Alexandre peut héberger le conteur si son hébergement accepte un backend persistant et un reverse proxy WebSocket. Pattern recommandé : `https://conteur.domaine.tld` ou `/conteur`, Basic Auth ou code d'accès applicatif, proxy HTTPS/WSS vers `uvicorn standalone.server:app`.
+
+État vérifié 11/06/2026 :
+- `eiffelai.io` et `galaadmf.fr` : Infomaniak/Apache, adaptés au statique, pas au process FastAPI persistant sans autre couche.
+- `leparede.org` : serveur Apache/WordPress/Nextcloud, FTP connu mais SSH root refusé avec les clés disponibles ; pas retenir comme cible backend tant qu'un accès shell n'est pas confirmé.
+- Hetzner `89.167.3.104` : Nginx déjà présent sur 80/443, plusieurs services persistants actifs ; cible la plus réaliste pour `conteur.galaadmf.fr` ou `conteur.eiffelai.io` via DNS A + Nginx reverse proxy.
+
 ## §1 — OpenAI Realtime API
 
 ### Modèles

@@ -7,6 +7,7 @@ Tools exposed to Cedar:
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -16,8 +17,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
+import httpx
 
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
@@ -55,6 +57,9 @@ logger = logging.getLogger("conteur.server")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_MODEL = os.getenv("MODEL", "gpt-realtime-2")
 DEFAULT_VOICE = os.getenv("VOICE", "cedar")
+BOOKS_DIR = PROJECT_ROOT / "data" / "books"
+TTS_CACHE_DIR = PROJECT_ROOT / ".cache" / "tts"
+TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 TRACE_DIR = Path("/tmp")
 TRACE_FILE = TRACE_DIR / f"cedar-conteur-trace-{int(time.time())}.jsonl"
@@ -78,6 +83,43 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
 logger.info("Trace file: %s", TRACE_FILE)
 seed_default_annotations()
+
+
+def _load_book(book_id: str) -> dict:
+    path = BOOKS_DIR / f"{book_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Book not found: {book_id}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _book_as_oeuvre(book: dict) -> dict:
+    text_complet = "\n\n".join(ch["text"] for ch in book.get("chapters", []))
+    return {
+        "id": f"book:{book['id']}",
+        "titre": book.get("title", book["id"]),
+        "auteur": book.get("author", "Auteur inconnu"),
+        "date": "",
+        "genre": "roman",
+        "source": book.get("source", "local"),
+        "text_complet": text_complet,
+        "by_character_structured": {},
+        "personnages_dracor": [],
+        "n_actes": "",
+        "n_scenes": len(book.get("chapters", [])),
+        "n_repliques": "",
+    }
+
+
+def _list_books() -> list[dict]:
+    books = []
+    for path in sorted(BOOKS_DIR.glob("*.json")):
+        book = json.loads(path.read_text(encoding="utf-8"))
+        books.append({
+            "id": book.get("id", path.stem),
+            "title": book.get("title", path.stem),
+            "author": book.get("author", ""),
+        })
+    return books
 
 
 CONTEUR_TOOLS = [
@@ -137,6 +179,26 @@ async def library() -> dict:
     return {
         "catalog": load_catalog(),
         "oeuvres": list_oeuvres_from_catalog(),
+        "books": _list_books(),
+    }
+
+
+@app.get("/api/book/{book_id}")
+async def get_book(book_id: str) -> dict:
+    book = _load_book(book_id)
+    oeuvre = _book_as_oeuvre(book)
+    return {
+        "book": {
+            "id": book["id"],
+            "title": book.get("title", book["id"]),
+            "author": book.get("author", ""),
+            "translator": book.get("translator", ""),
+            "source": book.get("source", ""),
+            "source_url": book.get("source_url", ""),
+            "chapters": book.get("chapters", []),
+        },
+        "oeuvre": oeuvre,
+        "annotations": load_annotations(oeuvre["id"]),
     }
 
 
@@ -182,9 +244,53 @@ async def post_trace(request: Request) -> dict:
     return {"ok": True, "n": len(events)}
 
 
+@app.post("/api/tts")
+async def post_tts(request: Request) -> Response:
+    if not OPENAI_KEY:
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY missing in .env")
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    voice = body.get("voice") or DEFAULT_VOICE or "cedar"
+    if not text:
+        raise HTTPException(status_code=400, detail="missing text")
+
+    cache_key = hashlib.sha256(
+        json.dumps({"text": text, "voice": voice}, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    cache_path = TTS_CACHE_DIR / f"{cache_key}.mp3"
+    if cache_path.exists():
+        return Response(cache_path.read_bytes(), media_type="audio/mpeg")
+
+    payload = {
+        "model": "gpt-4o-mini-tts",
+        "voice": voice,
+        "input": text,
+        "instructions": (
+            "Lis exactement le texte fourni, sans résumé, sans omission, sans commentaire. "
+            "Lecture française calme de livre du soir, diction claire, rythme régulier."
+        ),
+        "response_format": "mp3",
+    }
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            "https://api.openai.com/v1/audio/speech",
+            headers={
+                "Authorization": f"Bearer {OPENAI_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+    if resp.status_code >= 400:
+        logger.error("TTS failed %s: %s", resp.status_code, resp.text[:500])
+        raise HTTPException(status_code=resp.status_code, detail=resp.text[:500])
+    cache_path.write_bytes(resp.content)
+    return Response(resp.content, media_type="audio/mpeg")
+
+
 @app.websocket("/ws/session")
 async def ws_session(ws: WebSocket) -> None:
     await ws.accept()
+    logger.info("WS accepted from %s", ws.client)
     if not OPENAI_KEY:
         await ws.send_json({"type": "error", "error": "OPENAI_API_KEY missing in .env"})
         await ws.close()
@@ -465,10 +571,14 @@ async def ws_session(ws: WebSocket) -> None:
 
                 if mtype == "start":
                     oeuvre_id = data["oeuvre_id"]
+                    logger.info("WS start received: oeuvre_id=%s", oeuvre_id)
                     settings = data.get("settings", {})
                     dsp_enabled["on"] = bool(settings.get("dsp_enabled", True))
                     robot_enabled["on"] = bool(settings.get("robot_enabled", True))
-                    current_oeuvre = await fetch_oeuvre(oeuvre_id)
+                    if oeuvre_id.startswith("book:"):
+                        current_oeuvre = _book_as_oeuvre(_load_book(oeuvre_id.split(":", 1)[1]))
+                    else:
+                        current_oeuvre = await fetch_oeuvre(oeuvre_id)
                     annotations = load_annotations(oeuvre_id)
                     current_annotations = annotations
 

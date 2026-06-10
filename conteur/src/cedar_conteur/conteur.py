@@ -47,8 +47,11 @@ class Conteur:
 
     async def push_oeuvre_text(self, scene_text: str) -> None:
         await self.adapter.send_text(
-            "Voici le texte à lire maintenant. Lis-le tel quel, en jouant chaque personnage "
-            "selon le registre défini, sans paraphraser ni résumer :\n\n" + scene_text
+            "Lis intégralement le segment ci-dessous, mot pour mot, dans l'ordre. "
+            "N'abrège pas, ne résume pas, ne saute aucun paragraphe, n'ajoute pas de transition. "
+            "Commence directement par le texte, sans annoncer le segment ni faire de commentaire. "
+            "Si le segment se termine au milieu d'un chapitre, arrête-toi exactement à la fin du segment ; "
+            "le segment suivant sera envoyé ensuite. Texte :\n\n" + scene_text
         )
 
     async def push_user_text(self, text: str) -> None:

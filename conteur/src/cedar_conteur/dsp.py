@@ -16,9 +16,14 @@ import logging
 from typing import Any
 
 import numpy as np
-import pyrubberband as pyrb
+
+try:
+    import pyrubberband as pyrb
+except ModuleNotFoundError:
+    pyrb = None
 
 logger = logging.getLogger(__name__)
+_warned_missing_pyrubberband = False
 
 SAMPLE_RATE = 24000
 
@@ -50,6 +55,12 @@ def apply_profile(pcm_bytes: bytes, profile: dict[str, Any], prev_tail: bytes = 
     gain_db = float(profile.get("gain_db", 0) or 0)
 
     if (pitch == 0 and speed == 1.0 and vibrato_hz == 0 and gain_db == 0):
+        return pcm_bytes
+    if pyrb is None:
+        global _warned_missing_pyrubberband
+        if not _warned_missing_pyrubberband:
+            logger.warning("pyrubberband missing; server-side DSP disabled, returning raw audio")
+            _warned_missing_pyrubberband = True
         return pcm_bytes
 
     try:

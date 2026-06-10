@@ -49,3 +49,12 @@ Une ligne par événement marquant. `+` ajout/avancée, `-` blocage/abandon, `=`
 - `=` Tests fonctionnels du soir non terminés (à reprendre demain 13/05). Antennes restent à diagnostiquer.
 - `+` Wiki conteur mis à jour exhaustivement : STATE (pivot complet), DECISIONS (toutes les validations/abandons du jour), KNOWLEDGE_BASE (§1bis Cedar V1/V2, §13 SoundTouch streaming, §14 référentiels temporels, §15 résumé découplage TTS), INDEX (tools/ + docs/).
 - `+` MemPalace KG : 18 faits durables ajoutés (status, validated_for, abandoned_for, pinned_version, replaces, disabled_on, required_before).
+
+## 2026-06-11 (lecteur roman Android pour Galiléo)
+
+- `+` Ajout de *L'île au trésor* en livre local JSON chapitré.
+- `+` Mode livre mobile : contrôles chapitre précédent/suivant, démarrer/reprendre, pause, stop, reprise depuis sélection, progression locale par offset source.
+- `★` Lecture roman fiable via Realtime `gpt-realtime` + voix `cedar` V1. Speech REST abandonné pour cette clé (`missing_scope api.model.audio.request`).
+- `★` Enchaînement sans blanc : le segment suivant est demandé quand il reste environ 15 s d'audio local bufferisé, pas après silence complet.
+- `+` Test Playwright mobile 90 s : trois segments successifs du chapitre I (`0→776`, `776→1476`, `1476→2112`), statut `speaking`, progression sauvegardée.
+- `★` Déploiement pérenne : éviter Vercel statique/serverless pur. Cible : VPS/Fly.io/Render/Railway ou site existant avec backend persistant + proxy WebSocket + HTTPS + code d'accès.

@@ -39,15 +39,15 @@ Détecteur perso : `dsp.py:detect_perso_with_pos` (regex stricte sur transcript_
 Profil DSP : `applyPersoProfile(persoName)` côté browser sur event `perso.active`.
 Antennes Reachy : `set_perso_antennas` côté serveur (asyncio.to_thread).
 
-## P0 (au 11/05/2026 fin de session)
+## P0 / Suivant (au 11/06/2026)
 
-1. Sync timing perso se perd après ~3 répliques (mode plan demain).
-2. Cedar concatène le transcript mono-ligne → regex stricte rate des transitions.
-3. Micro-glitches DSP au switch (flush buffer pas optimal).
+1. Déployer le conteur sur un serveur accessible à la famille (pas Vercel statique pur) : Uvicorn persistant + HTTPS/WSS + code d'accès.
+2. Tester sur Android 15-20 minutes après déploiement.
+3. Anciens P0 théâtre à reprendre ensuite : antennes, transcript mono-ligne, latence perso.
 
 ## Référence canonique externe
 
-- **Bible vocale** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/IA/Modeles/openai-realtime-2-bible-vocale.md`
+- **Bible vocale** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/4 Ressources/Outils-IA/Modeles/openai-realtime-2-bible-vocale.md`
 - **MAP.md reachy_care** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/reachy_care/app/MAP.md`
 - **VOIX_CEDAR_MODE_HISTOIRE** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/reachy_care/app/docs/VOIX_CEDAR_MODE_HISTOIRE.md`
 

@@ -32,7 +32,19 @@ let micNode = null;
 let workletReady = false;
 let playbackTime = 0;
 let oeuvres = [];
+let books = [];
 let currentOeuvre = null;
+let currentBook = null;
+let currentChapterIndex = 0;
+let bookAutoReading = false;
+let autoStartPending = false;
+let bookPlayerState = "stopped";
+let bookReadingChapterIndex = null;
+let bookReadingStartOffset = 0;
+let bookSegmentEndOffset = 0;
+let bookTranscriptChars = 0;
+let ignoreNextResponseDone = false;
+let ignoreResponseDoneUntil = 0;
 let currentAnnotations = null;
 let isRunning = false;
 // Audio output chain (built once at session start):
@@ -45,6 +57,22 @@ let vibratoGain = null;
 let vibratoLFO = null;
 let vibratoDepthGain = null;
 let masterGain = null;
+let micWorkletAvailable = false;
+let soundtouchAvailable = false;
+let ttsSource = null;
+let ttsPlayToken = 0;
+let ttsNextPromise = null;
+let ttsNextMeta = null;
+let browserTtsMode = false;
+let currentUtterance = null;
+let browserSpeechWatchdog = null;
+let browserSpeechProgressTimer = null;
+let browserSpeechProgress = null;
+let lastBookSelection = null;
+let pendingBookSegment = null;
+let currentBookSegment = null;
+let bookRealtimeToken = 0;
+let bookNextRequested = false;
 
 async function init() {
   const cfg = await (await fetch("/api/config")).json();
@@ -54,6 +82,7 @@ async function init() {
     alert("OPENAI_API_KEY missing in conteur/.env — fill it then restart.");
   }
   $("model").value = cfg.model;
+  if ($("model").querySelector('option[value="gpt-realtime"]')) $("model").value = "gpt-realtime";
   $("voice").value = cfg.voice;
 
   await loadLibrary();
@@ -63,6 +92,7 @@ async function init() {
 async function loadLibrary() {
   const r = await (await fetch("/api/library")).json();
   oeuvres = r.oeuvres;
+  books = r.books || [];
   const genres = new Set(oeuvres.map(o => o.genre));
   const genreSel = $("genre-filter");
   for (const g of genres) {
@@ -70,7 +100,89 @@ async function loadLibrary() {
     opt.value = g; opt.textContent = g;
     genreSel.appendChild(opt);
   }
+  renderBooks();
   renderOeuvres();
+}
+
+function renderBooks() {
+  const ul = $("books-list");
+  ul.replaceChildren();
+  for (const b of books) {
+    const li = document.createElement("li");
+    li.textContent = `${b.title || b.id}${b.author ? " — " + b.author : ""}`;
+    li.dataset.id = b.id;
+    if (currentBook && currentBook.id === b.id) li.classList.add("active");
+    li.onclick = () => loadBook(b.id);
+    ul.appendChild(li);
+  }
+}
+
+function progressKey(bookId) {
+  return `cedar-conteur.progress.${bookId}`;
+}
+
+function loadBookProgress(bookId) {
+  try {
+    return JSON.parse(localStorage.getItem(progressKey(bookId)) || "null");
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveBookProgress(chapterIndex = currentChapterIndex, charOffset = 0) {
+  if (!currentBook) return;
+  const chapter = currentBook.chapters[chapterIndex];
+  if (!chapter) return;
+  const safeOffset = Math.max(0, Math.min(charOffset || 0, chapter.text.length));
+  localStorage.setItem(progressKey(currentBook.id), JSON.stringify({
+    chapterIndex,
+    charOffset: safeOffset,
+    updatedAt: new Date().toISOString(),
+  }));
+  updateBookProgressLabel(chapterIndex, safeOffset);
+}
+
+function currentBookProgress() {
+  if (!currentBook) return { chapterIndex: 0, charOffset: 0 };
+  const saved = loadBookProgress(currentBook.id) || {};
+  const chapterIndex = Math.max(0, Math.min(saved.chapterIndex || 0, currentBook.chapters.length - 1));
+  const chapter = currentBook.chapters[chapterIndex] || { text: "" };
+  const charOffset = Math.max(0, Math.min(saved.charOffset || 0, chapter.text.length));
+  return { chapterIndex, charOffset };
+}
+
+function updateBookProgressLabel(chapterIndex = currentChapterIndex, charOffset = null) {
+  if (!currentBook || !$("book-progress")) return;
+  const chapter = currentBook.chapters[chapterIndex];
+  if (!chapter) {
+    $("book-progress").textContent = "";
+    return;
+  }
+  const offset = charOffset === null ? (currentBookProgress().charOffset || 0) : charOffset;
+  const percent = chapter.text.length ? Math.round((offset / chapter.text.length) * 100) : 0;
+  $("book-progress").textContent = `${chapter.roman} · ${percent}%`;
+}
+
+function snapToParagraph(text, offset) {
+  if (!offset || offset < 200) return 0;
+  const windowStart = Math.max(0, offset - 600);
+  const before = text.slice(windowStart, offset);
+  const para = before.lastIndexOf("\n\n");
+  if (para !== -1) return windowStart + para + 2;
+  const sentence = Math.max(before.lastIndexOf(". "), before.lastIndexOf(" !"), before.lastIndexOf(" ?"));
+  return sentence !== -1 ? windowStart + sentence + 2 : Math.max(0, offset - 300);
+}
+
+function nextSegmentEnd(text, startOffset, targetSize = 900) {
+  if (startOffset + targetSize >= text.length) return text.length;
+  const minEnd = Math.min(text.length, startOffset + Math.floor(targetSize * 0.65));
+  const maxEnd = Math.min(text.length, startOffset + targetSize);
+  const window = text.slice(minEnd, maxEnd);
+  const para = window.lastIndexOf("\n\n");
+  if (para !== -1) return minEnd + para + 2;
+  const sentence = Math.max(window.lastIndexOf(". "), window.lastIndexOf(" !"), window.lastIndexOf(" ?"));
+  if (sentence !== -1) return minEnd + sentence + 2;
+  return maxEnd;
 }
 
 function renderOeuvres() {
@@ -95,6 +207,8 @@ async function loadOeuvre(id) {
   try {
     const r = await (await fetch("/api/oeuvre/" + encodeURIComponent(id))).json();
     currentOeuvre = r.oeuvre;
+    currentBook = null;
+    bookAutoReading = false;
     currentAnnotations = r.annotations;
     $("oeuvre-title").textContent = currentOeuvre.titre || id;
     $("oeuvre-meta").textContent =
@@ -104,9 +218,12 @@ async function loadOeuvre(id) {
       .filter(Boolean).join(" · ");
 
     renderFullText();
+    renderBookControls();
     renderAnnotations();
     $("start").disabled = false;
     renderOeuvres();
+    renderBooks();
+    closeResponsiveMenu();
     setStatus("idle");
   } catch (e) {
     console.error(e);
@@ -115,11 +232,80 @@ async function loadOeuvre(id) {
   }
 }
 
+async function loadBook(id) {
+  setStatus("connecting");
+  try {
+    if (ws || isRunning) stopSession();
+    stopTtsSource();
+    const r = await (await fetch("/api/book/" + encodeURIComponent(id))).json();
+    currentBook = r.book;
+    currentOeuvre = r.oeuvre;
+    currentAnnotations = r.annotations;
+    currentChapterIndex = currentBookProgress().chapterIndex;
+    bookPlayerState = "stopped";
+    bookAutoReading = false;
+    $("oeuvre-title").textContent = currentBook.title || id;
+    $("oeuvre-meta").textContent =
+      [currentBook.author, currentBook.translator ? `trad. ${currentBook.translator}` : "", `${currentBook.chapters.length} chapitres`]
+      .filter(Boolean).join(" · ");
+    renderFullText();
+    renderBookControls();
+    renderAnnotations();
+    $("start").disabled = false;
+    renderOeuvres();
+    renderBooks();
+    closeResponsiveMenu();
+    setStatus("idle");
+  } catch (e) {
+    console.error(e);
+    setStatus("error");
+    alert("Livre introuvable — " + e.message);
+  }
+}
+
+function closeResponsiveMenu() {
+  if (window.matchMedia("(max-width: 900px)").matches) {
+    document.body.classList.remove("menu-open");
+  }
+}
+
+function renderBookControls() {
+  const box = $("book-controls");
+  if (!currentBook) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const sel = $("chapter-select");
+  sel.replaceChildren();
+  currentBook.chapters.forEach((ch, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${ch.roman}. ${ch.title}`;
+    sel.appendChild(opt);
+  });
+  sel.value = String(currentChapterIndex);
+  $("book-prev").disabled = currentChapterIndex <= 0;
+  $("book-play").disabled = false;
+  $("book-play").textContent = bookPlayerState === "paused" ? "Reprendre" : "Démarrer";
+  $("book-pause").disabled = bookPlayerState !== "playing" && bookPlayerState !== "loading";
+  $("book-next").disabled = currentChapterIndex >= currentBook.chapters.length - 1;
+  $("book-stop").disabled = bookPlayerState === "stopped";
+  $("book-from-selection").disabled = false;
+  updateBookProgressLabel();
+}
+
 let currentPersoFilter = null;
 
 function renderFullText() {
   const txtDiv = $("oeuvre-text");
   txtDiv.replaceChildren();
+  if (currentBook) {
+    const chapter = currentBook.chapters[currentChapterIndex] || currentBook.chapters[0];
+    $("text-pane-summary").textContent = `Chapitre ${chapter.roman} — ${chapter.title}`;
+    txtDiv.appendChild(document.createTextNode(chapter.text || ""));
+    return;
+  }
   if (currentPersoFilter) {
     $("text-pane-summary").textContent =
       `Répliques de ${currentPersoFilter} par acte/scène — clique sur "Tout le texte" pour revenir`;
@@ -287,6 +473,34 @@ function renderPronRow(mot, pron) {
 function bindUI() {
   $("search").oninput = renderOeuvres;
   $("genre-filter").onchange = renderOeuvres;
+  $("toggle-menu").onclick = () => document.body.classList.toggle("menu-open");
+  $("close-menu").onclick = closeResponsiveMenu;
+  $("toggle-annotations").onclick = () => {
+    const panel = document.querySelector(".annotations");
+    if (panel) panel.style.display = "block";
+    document.body.classList.remove("annotations-hidden");
+    document.body.classList.add("annotations-visible");
+  };
+  $("close-annotations").onclick = () => {
+    const panel = document.querySelector(".annotations");
+    if (panel) panel.style.display = "none";
+    document.body.classList.add("annotations-hidden");
+    document.body.classList.remove("annotations-visible");
+  };
+  $("chapter-select").onchange = (e) => {
+    currentChapterIndex = parseInt(e.target.value, 10) || 0;
+    resetBookSegmentState();
+    saveBookProgress(currentChapterIndex, 0);
+    renderFullText();
+    renderBookControls();
+    if (currentBook && (bookPlayerState === "playing" || bookPlayerState === "loading")) {
+      playBookFromOffset(currentChapterIndex, 0);
+    }
+  };
+  $("toggle-player").onclick = () => {
+    document.body.classList.toggle("player-collapsed");
+    $("toggle-player").textContent = document.body.classList.contains("player-collapsed") ? "Lecteur" : "Masquer";
+  };
 
   $("speed").oninput = (e) => {
     $("speed-val").textContent = parseFloat(e.target.value).toFixed(2);
@@ -334,14 +548,27 @@ function bindUI() {
     }
   };
 
-  $("start").onclick = startSession;
+  $("start").onclick = () => {
+    if (currentBook) playBookFromProgress();
+    else startSession();
+  };
   $("cancel").onclick = () => {
+    if (currentBook) {
+      pauseBookPlayback();
+      return;
+    }
     // Kill local audio FIRST so the user hears silence immediately,
     // independent of WS round-trip latency.
-    killLocalAudio();
-    wsSend({ type: "cancel" });
+    bookPlayerState = "paused";
+    bookAutoReading = false;
+    updateProgressFromTranscript();
+    cancelCurrentResponseImmediately();
+    renderBookControls();
   };
-  $("stop").onclick = stopSession;
+  $("stop").onclick = () => {
+    if (currentBook) stopBookPlayback();
+    else stopSession();
+  };
   $("push-scene").onclick = () => {
     const txt = $("scene-text").value.trim();
     if (!txt || !isRunning) return;
@@ -357,6 +584,20 @@ function bindUI() {
     if (!isRunning) return;
     wsSend({ type: "text", text: "Continue la lecture où tu t'étais arrêté, sans répéter." });
   };
+  $("book-prev").onclick = () => jumpBookChapter(-1);
+  $("book-play").onclick = () => {
+    if (!currentBook) return;
+    playBookFromProgress();
+  };
+  $("book-pause").onclick = pauseBookPlayback;
+  $("book-next").onclick = () => jumpBookChapter(1);
+  $("book-stop").onclick = stopBookPlayback;
+  $("book-from-selection").onclick = playBookFromSelection;
+  $("book-from-selection").onpointerdown = (e) => {
+    captureBookSelection();
+    e.preventDefault();
+  };
+  document.addEventListener("selectionchange", captureBookSelection);
 
 }
 
@@ -364,76 +605,577 @@ async function startSession() {
   if (!currentOeuvre) return;
   setStatus("connecting");
   $("start").disabled = true;
+  autoStartPending = true;
 
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-  playbackTime = audioCtx.currentTime;
-  if (!workletReady) {
-    await audioCtx.audioWorklet.addModule("/static/mic-worklet.js");
-    await audioCtx.audioWorklet.addModule("/static/soundtouch-worklet.js");
-    workletReady = true;
+  try {
+    const wsProtocol = location.protocol === "https:" ? "wss://" : "ws://";
+    ws = new WebSocket(wsProtocol + location.host + "/ws/session");
+    ws.binaryType = "arraybuffer";
+    ws.onopen = () => {
+      wsSend({
+        type: "start",
+        oeuvre_id: currentOeuvre.id,
+        settings: {
+          model: $("model").value,
+          voice: $("voice").value,
+          speed: parseFloat($("speed").value),
+          reasoning_effort: $("reasoning").value,
+          enable_preambles: $("preambles").checked,
+          dsp_enabled: $("dsp-enabled").checked,
+          robot_enabled: $("robot-enabled").checked,
+        },
+      });
+    };
+    ws.onmessage = onWsMessage;
+    ws.onerror = (e) => { console.error(e); setStatus("error"); $("start").disabled = false; };
+    ws.onclose = () => {
+      isRunning = false; setStatus("idle");
+      $("start").disabled = false; $("cancel").disabled = true; $("stop").disabled = true;
+      renderBookControls();
+    };
+  } catch (e) {
+    console.error(e);
+    setStatus("error");
+    $("start").disabled = false;
+    appendTranscript("cedar", "Impossible d'ouvrir la session.");
+    return;
   }
 
-  // Build the persistent output chain. Each incoming audio chunk creates an
-  // ephemeral BufferSource that connects into pitchNode; pitchNode et al. live
-  // for the whole session so their state (pitch, vibrato, gain) survives
-  // across chunks and perso switches.
-  pitchNode = new AudioWorkletNode(audioCtx, "streaming-pitch-shifter", {
-    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
-  });
-  vibratoGain = audioCtx.createGain();
-  vibratoGain.gain.value = 1.0;
-  vibratoLFO = audioCtx.createOscillator();
-  vibratoLFO.frequency.value = 0;
-  vibratoDepthGain = audioCtx.createGain();
-  vibratoDepthGain.gain.value = 0;
-  vibratoLFO.connect(vibratoDepthGain);
-  vibratoDepthGain.connect(vibratoGain.gain);
-  vibratoLFO.start();
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1.0;
-  pitchNode.connect(vibratoGain);
-  vibratoGain.connect(masterGain);
-  masterGain.connect(audioCtx.destination);
-  // Start neutral (narrator profile).
-  applyPersoProfile(null);
+  setupAudioBestEffort();
+}
 
-  micStream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, sampleRate: 24000, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-  });
+async function setupAudioBestEffort() {
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+    playbackTime = audioCtx.currentTime;
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1.0;
+    masterGain.connect(audioCtx.destination);
 
-  const src = audioCtx.createMediaStreamSource(micStream);
-  micNode = new AudioWorkletNode(audioCtx, "mic-pcm16-processor");
-  micNode.port.onmessage = (e) => {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(e.data);
-  };
-  src.connect(micNode);
+    if (!workletReady && audioCtx.audioWorklet) {
+      try {
+        await audioCtx.audioWorklet.addModule("/static/mic-worklet.js");
+        micWorkletAvailable = true;
+      } catch (e) {
+        micWorkletAvailable = false;
+        appendTranscript("you", "(micro worklet indisponible)");
+      }
+      try {
+        await audioCtx.audioWorklet.addModule("/static/soundtouch-worklet.js");
+        soundtouchAvailable = true;
+      } catch (e) {
+        soundtouchAvailable = false;
+        appendTranscript("you", "(DSP indisponible, lecture audio brute)");
+      }
+      workletReady = true;
+    }
 
-  ws = new WebSocket("ws://" + location.host + "/ws/session");
-  ws.binaryType = "arraybuffer";
-  ws.onopen = () => {
-    wsSend({
-      type: "start",
-      oeuvre_id: currentOeuvre.id,
-      settings: {
-        model: $("model").value,
-        voice: $("voice").value,
-        speed: parseFloat($("speed").value),
-        reasoning_effort: $("reasoning").value,
-        enable_preambles: $("preambles").checked,
-        dsp_enabled: $("dsp-enabled").checked,
-        robot_enabled: $("robot-enabled").checked,
-      },
-    });
-  };
-  ws.onmessage = onWsMessage;
-  ws.onerror = (e) => { console.error(e); setStatus("error"); };
-  ws.onclose = () => {
-    isRunning = false; setStatus("idle");
-    $("start").disabled = false; $("cancel").disabled = true; $("stop").disabled = true;
-  };
+    if (soundtouchAvailable) {
+      pitchNode = new AudioWorkletNode(audioCtx, "streaming-pitch-shifter", {
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+      });
+      vibratoGain = audioCtx.createGain();
+      vibratoGain.gain.value = 1.0;
+      vibratoLFO = audioCtx.createOscillator();
+      vibratoLFO.frequency.value = 0;
+      vibratoDepthGain = audioCtx.createGain();
+      vibratoDepthGain.gain.value = 0;
+      vibratoLFO.connect(vibratoDepthGain);
+      vibratoDepthGain.connect(vibratoGain.gain);
+      vibratoLFO.start();
+      pitchNode.connect(vibratoGain);
+      vibratoGain.connect(masterGain);
+    }
+    applyPersoProfile(null);
+
+    if (micWorkletAvailable && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: 24000, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      const src = audioCtx.createMediaStreamSource(micStream);
+      micNode = new AudioWorkletNode(audioCtx, "mic-pcm16-processor");
+      micNode.port.onmessage = (e) => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+      };
+      src.connect(micNode);
+    }
+  } catch (e) {
+    appendTranscript("you", "(audio local partiel, lecture texte seule)");
+  }
 }
 
 function wsSend(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+
+async function ensureAudioOutput() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 1.0;
+    masterGain.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === "suspended") await audioCtx.resume();
+}
+
+function makeBookSegment(chapterIndex, charOffset = 0, { snap = false } = {}) {
+  const chapter = currentBook?.chapters?.[chapterIndex];
+  if (!chapter) return null;
+  const safeOffset = Math.max(0, Math.min(charOffset || 0, chapter.text.length));
+  const startOffset = snap ? snapToParagraph(chapter.text, safeOffset) : safeOffset;
+  if (startOffset >= chapter.text.length) return null;
+  const endOffset = nextSegmentEnd(chapter.text, startOffset);
+  const text = chapter.text.slice(startOffset, endOffset);
+  return { chapterIndex, startOffset, endOffset, text };
+}
+
+async function fetchTtsBuffer(segment) {
+  const response = await fetch("/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text: segment.text,
+      voice: $("voice")?.value || "cedar",
+    }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const arr = await response.arrayBuffer();
+  await ensureAudioOutput();
+  return await audioCtx.decodeAudioData(arr);
+}
+
+async function ensureBookRealtimeSession() {
+  if (isRunning && ws && ws.readyState === WebSocket.OPEN) return true;
+  pendingBookSegment = currentBookSegment;
+  startSession();
+  return false;
+}
+
+async function pushBookRealtimeSegment(segment) {
+  if (!currentBook || !segment) return;
+  currentBookSegment = segment;
+  pendingBookSegment = segment;
+  const ready = await ensureBookRealtimeSession();
+  if (!ready) return;
+  pendingBookSegment = null;
+  const token = ++bookRealtimeToken;
+  bookNextRequested = false;
+  await ensureAudioOutput();
+  currentChapterIndex = segment.chapterIndex;
+  $("chapter-select").value = String(currentChapterIndex);
+  renderFullText();
+  saveBookProgress(segment.chapterIndex, segment.startOffset);
+  bookReadingChapterIndex = segment.chapterIndex;
+  bookReadingStartOffset = segment.startOffset;
+  bookSegmentEndOffset = segment.endOffset;
+  bookPlayerState = "playing";
+  bookAutoReading = true;
+  renderBookControls();
+  wsSend({ type: "push_scene", scene_text: segment.text });
+  trace("book_segment_push", {
+    chapterIndex: segment.chapterIndex,
+    startOffset: segment.startOffset,
+    endOffset: segment.endOffset,
+    chars: segment.text.length,
+  });
+  return token;
+}
+
+function followingSegment(segment) {
+  const chapter = currentBook.chapters[segment.chapterIndex];
+  if (segment.endOffset < chapter.text.length) {
+    return makeBookSegment(segment.chapterIndex, segment.endOffset, { snap: false });
+  }
+  const nextChapterIndex = segment.chapterIndex + 1;
+  if (nextChapterIndex < currentBook.chapters.length) {
+    return makeBookSegment(nextChapterIndex, 0);
+  }
+  return null;
+}
+
+function stopTtsSource({ invalidate = true } = {}) {
+  if (invalidate) ttsPlayToken += 1;
+  clearBrowserSpeechTimers();
+  if (currentUtterance && window.speechSynthesis) {
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+    currentUtterance = null;
+  }
+  browserSpeechProgress = null;
+  if (ttsSource) {
+    try { ttsSource.stop(0); } catch (_) {}
+    ttsSource = null;
+  }
+}
+
+function clearBrowserSpeechTimers() {
+  if (browserSpeechWatchdog) {
+    clearTimeout(browserSpeechWatchdog);
+    browserSpeechWatchdog = null;
+  }
+  if (browserSpeechProgressTimer) {
+    clearInterval(browserSpeechProgressTimer);
+    browserSpeechProgressTimer = null;
+  }
+}
+
+function saveApproxTtsProgress() {
+  if (currentBookSegment && bookReadingChapterIndex !== null) {
+    saveBookProgress(bookReadingChapterIndex, bookReadingStartOffset);
+    return;
+  }
+  if (browserSpeechProgress) {
+    saveBookProgress(browserSpeechProgress.chapterIndex, browserSpeechProgress.charOffset);
+    return;
+  }
+  if (!ttsSource || !currentBook || bookReadingChapterIndex === null || !audioCtx) return;
+  const duration = ttsSource.buffer?.duration || 0;
+  if (!duration) return;
+  const elapsed = Math.max(0, audioCtx.currentTime - (ttsSource._startedAt || audioCtx.currentTime));
+  const ratio = Math.max(0, Math.min(1, elapsed / duration));
+  const offset = Math.round(bookReadingStartOffset + (bookSegmentEndOffset - bookReadingStartOffset) * ratio);
+  saveBookProgress(bookReadingChapterIndex, offset);
+}
+
+async function playTtsSegment(segment, bufferPromise = null) {
+  if (!currentBook || !segment) return;
+  if (browserTtsMode) {
+    playBrowserSpeechSegment(segment);
+    return;
+  }
+  const token = ++ttsPlayToken;
+  await ensureAudioOutput();
+  bookPlayerState = "loading";
+  renderBookControls();
+  let buffer;
+  try {
+    buffer = await (bufferPromise || fetchTtsBuffer(segment));
+  } catch (e) {
+    console.error(e);
+    bookPlayerState = "paused";
+    bookAutoReading = false;
+    renderBookControls();
+    setStatus("error");
+    appendTranscript("cedar", "OpenAI Cedar indisponible : " + readableTtsError(e));
+    return;
+  }
+  if (token !== ttsPlayToken) return;
+
+  currentChapterIndex = segment.chapterIndex;
+  $("chapter-select").value = String(currentChapterIndex);
+  renderFullText();
+  saveBookProgress(segment.chapterIndex, segment.startOffset);
+  bookReadingChapterIndex = segment.chapterIndex;
+  bookReadingStartOffset = segment.startOffset;
+  bookSegmentEndOffset = segment.endOffset;
+  browserSpeechProgress = { chapterIndex: segment.chapterIndex, charOffset: segment.startOffset };
+  bookPlayerState = "playing";
+  bookAutoReading = true;
+  renderBookControls();
+
+  const next = followingSegment(segment);
+  ttsNextMeta = next;
+  ttsNextPromise = next ? fetchTtsBuffer(next) : null;
+
+  stopTtsSource({ invalidate: false });
+  const src = audioCtx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(masterGain || audioCtx.destination);
+  src._startedAt = audioCtx.currentTime;
+  ttsSource = src;
+  src.onended = () => {
+    if (token !== ttsPlayToken || bookPlayerState !== "playing") return;
+    saveBookProgress(segment.chapterIndex, segment.endOffset);
+    if (ttsNextMeta && ttsNextPromise) {
+      playTtsSegment(ttsNextMeta, ttsNextPromise);
+    } else {
+      bookPlayerState = "stopped";
+      bookAutoReading = false;
+      appendTranscript("cedar", "(fin du livre)");
+      renderBookControls();
+    }
+  };
+  src.start(0);
+}
+
+function playBrowserSpeechSegment(segment) {
+  if (!window.speechSynthesis) {
+    appendTranscript("cedar", "Synthèse vocale navigateur indisponible.");
+    return;
+  }
+  const token = ++ttsPlayToken;
+  currentChapterIndex = segment.chapterIndex;
+  $("chapter-select").value = String(currentChapterIndex);
+  renderFullText();
+  saveBookProgress(segment.chapterIndex, segment.startOffset);
+  bookReadingChapterIndex = segment.chapterIndex;
+  bookReadingStartOffset = segment.startOffset;
+  bookSegmentEndOffset = segment.endOffset;
+  browserSpeechProgress = { chapterIndex: segment.chapterIndex, charOffset: segment.startOffset };
+  const segmentStartedAt = performance.now();
+  const estimatedMs = Math.max(7000, segment.text.length * 85);
+  bookPlayerState = "playing";
+  bookAutoReading = true;
+  renderBookControls();
+
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(segment.text);
+  utterance.lang = "fr-FR";
+  utterance.rate = Math.max(0.7, Math.min(1.3, parseFloat($("speed")?.value || "0.92")));
+  const voices = window.speechSynthesis.getVoices?.() || [];
+  const frVoice = voices.find(v => /fr/i.test(v.lang || "")) || voices.find(v => /french|français/i.test(v.name || ""));
+  if (frVoice) utterance.voice = frVoice;
+  utterance.onboundary = (ev) => {
+    if (token !== ttsPlayToken || typeof ev.charIndex !== "number") return;
+    const charOffset = Math.max(segment.startOffset, Math.min(segment.endOffset, segment.startOffset + ev.charIndex));
+    browserSpeechProgress = { chapterIndex: segment.chapterIndex, charOffset };
+    saveBookProgress(segment.chapterIndex, charOffset);
+  };
+  utterance.onend = () => {
+    clearBrowserSpeechTimers();
+    if (token !== ttsPlayToken || bookPlayerState !== "playing") return;
+    browserSpeechProgress = { chapterIndex: segment.chapterIndex, charOffset: segment.endOffset };
+    saveBookProgress(segment.chapterIndex, segment.endOffset);
+    const next = followingSegment(segment);
+    if (next) playBrowserSpeechSegment(next);
+    else {
+      bookPlayerState = "stopped";
+      bookAutoReading = false;
+      appendTranscript("cedar", "(fin du livre)");
+      renderBookControls();
+    }
+  };
+  utterance.onerror = (ev) => {
+    clearBrowserSpeechTimers();
+    if (token !== ttsPlayToken) return;
+    if (ev.error === "interrupted" || ev.error === "canceled") return;
+    appendTranscript("cedar", "Erreur synthèse vocale : " + (ev.error || "inconnue"));
+    bookPlayerState = "paused";
+    renderBookControls();
+  };
+  currentUtterance = utterance;
+  window.speechSynthesis.speak(utterance);
+  browserSpeechProgressTimer = setInterval(() => {
+    if (token !== ttsPlayToken || bookPlayerState !== "playing") return;
+    const elapsed = performance.now() - segmentStartedAt;
+    const ratio = Math.max(0, Math.min(0.96, elapsed / estimatedMs));
+    const charOffset = Math.round(segment.startOffset + (segment.endOffset - segment.startOffset) * ratio);
+    if (!browserSpeechProgress || charOffset > browserSpeechProgress.charOffset) {
+      browserSpeechProgress = { chapterIndex: segment.chapterIndex, charOffset };
+      saveBookProgress(segment.chapterIndex, charOffset);
+    }
+  }, 1000);
+  browserSpeechWatchdog = setTimeout(() => {
+    if (token !== ttsPlayToken || bookPlayerState !== "playing") return;
+    const resumeOffset = browserSpeechProgress?.charOffset || segment.startOffset;
+    stopTtsSource();
+    appendTranscript("cedar", "(reprise automatique après blocage vocal)");
+    playBookFromOffset(segment.chapterIndex, resumeOffset);
+  }, estimatedMs + 6000);
+}
+
+function readableTtsError(error) {
+  const raw = String(error?.message || error || "");
+  if (raw.includes("api.model.audio.request") || raw.includes("missing_scope")) {
+    return "la clé OpenAI n'a pas le scope audio `api.model.audio.request`. Il faut une clé projet avec accès Audio/Speech pour utiliser Cedar.";
+  }
+  return raw.slice(0, 300) || "erreur inconnue";
+}
+
+function playBookFromOffset(chapterIndex, charOffset) {
+  if (!currentBook) return;
+  bookRealtimeToken += 1;
+  stopTtsSource();
+  killLocalAudio();
+  resetBookSegmentState();
+  const segment = makeBookSegment(chapterIndex, charOffset, { snap: false });
+  if (!segment) return;
+  pushBookRealtimeSegment(segment);
+}
+
+function playBookFromProgress() {
+  if (!currentBook) return;
+  const saved = currentBookProgress();
+  currentChapterIndex = saved.chapterIndex;
+  $("chapter-select").value = String(currentChapterIndex);
+  renderFullText();
+  playBookFromOffset(saved.chapterIndex, saved.charOffset);
+}
+
+function playBookFromSelection() {
+  if (!currentBook) return;
+  const chapter = currentBook.chapters[currentChapterIndex];
+  if (!chapter) return;
+  const selection = lastBookSelection || captureBookSelection();
+  if (!selection || selection.chapterIndex !== currentChapterIndex) {
+    appendTranscript("you", "(sélectionne un morceau du texte affiché puis appuie sur Depuis sélection)");
+    return;
+  }
+  const charOffset = selection.charOffset;
+  bookAutoReading = true;
+  bookPlayerState = "playing";
+  resetBookSegmentState();
+  saveBookProgress(currentChapterIndex, charOffset);
+  renderBookControls();
+  playBookFromOffset(currentChapterIndex, charOffset);
+}
+
+function captureBookSelection() {
+  if (!currentBook) return null;
+  const txtDiv = $("oeuvre-text");
+  const sel = window.getSelection && window.getSelection();
+  if (!txtDiv || !sel || !sel.rangeCount || sel.isCollapsed) return lastBookSelection;
+  const range = sel.getRangeAt(0);
+  if (!txtDiv.contains(range.startContainer)) return lastBookSelection;
+  let offset = 0;
+  if (range.startContainer.nodeType === Node.TEXT_NODE) {
+    offset = range.startOffset;
+  } else {
+    const selected = String(sel).trim();
+    if (!selected) return lastBookSelection;
+    offset = selectedOffsetInDisplayedChapter(selected, currentBook.chapters[currentChapterIndex]?.text || "");
+  }
+  const chapter = currentBook.chapters[currentChapterIndex];
+  if (!chapter) return lastBookSelection;
+  lastBookSelection = {
+    chapterIndex: currentChapterIndex,
+    charOffset: Math.max(0, Math.min(offset, chapter.text.length)),
+  };
+  return lastBookSelection;
+}
+
+function selectedOffsetInDisplayedChapter(selected, chapterText) {
+  const txtDiv = $("oeuvre-text");
+  const sel = window.getSelection && window.getSelection();
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (txtDiv.contains(range.startContainer) && range.startContainer.nodeType === Node.TEXT_NODE) {
+      return range.startOffset;
+    }
+  }
+  const idx = normalizeTextForSearch(chapterText).indexOf(normalizeTextForSearch(selected).slice(0, 180));
+  if (idx < 0) return 0;
+  return offsetFromNormalizedIndex(chapterText, idx);
+}
+
+function pauseBookPlayback() {
+  if (!currentBook) return;
+  saveApproxTtsProgress();
+  bookPlayerState = "paused";
+  bookAutoReading = false;
+  bookRealtimeToken += 1;
+  pendingBookSegment = null;
+  currentBookSegment = null;
+  stopTtsSource();
+  cancelCurrentResponseImmediately();
+  renderBookControls();
+}
+
+function stopBookPlayback() {
+  if (!currentBook) return;
+  bookPlayerState = "stopped";
+  bookAutoReading = false;
+  bookRealtimeToken += 1;
+  pendingBookSegment = null;
+  currentBookSegment = null;
+  stopTtsSource();
+  cancelCurrentResponseImmediately();
+  saveBookProgress(currentChapterIndex, 0);
+  renderBookControls();
+}
+
+function jumpBookChapter(delta) {
+  if (!currentBook) return;
+  const nextIndex = Math.max(0, Math.min(currentChapterIndex + delta, currentBook.chapters.length - 1));
+  if (nextIndex === currentChapterIndex) return;
+  bookAutoReading = false;
+  bookPlayerState = "loading";
+  stopTtsSource();
+  currentChapterIndex = nextIndex;
+  resetBookSegmentState();
+  saveBookProgress(currentChapterIndex, 0);
+  $("chapter-select").value = String(currentChapterIndex);
+  renderFullText();
+  playBookFromOffset(currentChapterIndex, 0);
+}
+
+function normalizeTextForSearch(text) {
+  return (text || "").replace(/\s+/g, " ").trim();
+}
+
+function offsetFromNormalizedIndex(text, normalizedIndex) {
+  let normCount = 0;
+  let inSpace = false;
+  for (let i = 0; i < text.length; i++) {
+    const isSpace = /\s/.test(text[i]);
+    if (isSpace) {
+      if (!inSpace) {
+        if (normCount >= normalizedIndex) return i;
+        normCount += 1;
+        inSpace = true;
+      }
+    } else {
+      if (normCount >= normalizedIndex) return i;
+      normCount += 1;
+      inSpace = false;
+    }
+  }
+  return text.length;
+}
+
+function resetBookSegmentState() {
+  bookReadingChapterIndex = null;
+  bookReadingStartOffset = 0;
+  bookSegmentEndOffset = 0;
+  bookTranscriptChars = 0;
+  currentBookSegment = null;
+}
+
+function updateProgressFromTranscript(extraChars = 0) {
+  if (!currentBook || bookReadingChapterIndex === null) return;
+  const chapter = currentBook.chapters[bookReadingChapterIndex];
+  if (!chapter) return;
+  bookTranscriptChars += extraChars;
+  const offset = Math.min(chapter.text.length, bookReadingStartOffset + bookTranscriptChars);
+  saveBookProgress(bookReadingChapterIndex, offset);
+}
+
+function cancelCurrentResponseImmediately() {
+  ignoreNextResponseDone = true;
+  ignoreResponseDoneUntil = Date.now() + 1500;
+  killLocalAudio();
+  wsSend({ type: "cancel" });
+}
+
+function waitForBookAudioEnd(token, segment) {
+  const started = performance.now();
+  const check = () => {
+    if (token !== bookRealtimeToken || bookPlayerState !== "playing" || currentBookSegment !== segment) return;
+    const remaining = audioCtx ? playbackTime - audioCtx.currentTime : 0;
+    const next = followingSegment(segment);
+    if (next && !bookNextRequested && remaining <= 15) {
+      bookNextRequested = true;
+      saveBookProgress(segment.chapterIndex, segment.endOffset);
+      pushBookRealtimeSegment(next);
+      return;
+    }
+    const audioDone = activeSources.size === 0 && remaining <= 0.08;
+    const timedOut = performance.now() - started > Math.max(20000, segment.text.length * 180);
+    if (!audioDone && !timedOut) {
+      setTimeout(check, 120);
+      return;
+    }
+    saveBookProgress(segment.chapterIndex, segment.endOffset);
+    if (next) {
+      pushBookRealtimeSegment(next);
+    } else {
+      currentBookSegment = null;
+      pendingBookSegment = null;
+      bookPlayerState = "stopped";
+      bookAutoReading = false;
+      appendTranscript("cedar", "(fin du livre)");
+      renderBookControls();
+    }
+  };
+  setTimeout(check, 120);
+}
 
 function onWsMessage(ev) {
   let msg;
@@ -447,7 +1189,17 @@ function onWsMessage(ev) {
       $("push-scene").disabled = false;
       $("push-all").disabled = false;
       $("continue-reading").disabled = false;
-      appendTranscript("cedar", "(prêt — parle.)");
+      renderBookControls();
+      if (!currentBook) appendTranscript("cedar", "(prêt — parle.)");
+      if (autoStartPending) {
+        autoStartPending = false;
+        if (currentBook) {
+          pushBookRealtimeSegment(pendingBookSegment || currentBookSegment || makeBookSegment(currentChapterIndex, currentBookProgress().charOffset, { snap: false }));
+        } else if (currentOeuvre && currentOeuvre.text_complet) {
+          appendTranscript("you", `(lecture automatique : ${currentOeuvre.text_complet.length} caractères)`);
+          wsSend({ type: "push_scene", scene_text: currentOeuvre.text_complet });
+        }
+      }
       break;
     case "audio.delta":
       playAudioDelta(msg.data, msg.byte_offset || 0);
@@ -466,10 +1218,19 @@ function onWsMessage(ev) {
       setStatus("speaking");
       break;
     case "response.done":
-      setStatus("ready");
+      if (currentBook && currentBookSegment && bookPlayerState === "playing") setStatus("speaking");
+      else setStatus("ready");
       cedarLineDone = true;
       chunkSchedule.length = 0;
       pendingSwitches.length = 0;
+      if (ignoreNextResponseDone || Date.now() < ignoreResponseDoneUntil) {
+        ignoreNextResponseDone = false;
+        renderBookControls();
+        break;
+      }
+      if (currentBook && currentBookSegment && bookPlayerState === "playing") {
+        waitForBookAudioEnd(bookRealtimeToken, currentBookSegment);
+      }
       break;
     case "audio.cancel":
       // Server tells us the user requested an interrupt. The local Interrompre
@@ -548,12 +1309,14 @@ function profileForPerso(persoName) {
 // Apply a perso's profile to the persistent audio chain. Ramps params over
 // 30 ms to avoid clicks. Called on perso.active events from the server.
 function applyPersoProfile(persoName) {
-  if (!pitchNode || !audioCtx) return;
+  if (!audioCtx) return;
   const p = profileForPerso(persoName);
   const t = audioCtx.currentTime;
   const ramp = 0.03;
-  pitchNode.port.postMessage({ name: "pitchSemitones", value: p.pitch_shift });
-  pitchNode.port.postMessage({ name: "tempo",          value: p.speed_hint || 1.0 });
+  if (pitchNode) {
+    pitchNode.port.postMessage({ name: "pitchSemitones", value: p.pitch_shift });
+    pitchNode.port.postMessage({ name: "tempo",          value: p.speed_hint || 1.0 });
+  }
   // Vibrato: LFO frequency + depth (depth is fraction of unit gain to modulate)
   if (vibratoLFO && vibratoDepthGain) {
     vibratoLFO.frequency.setTargetAtTime(p.vibrato_hz || 0, t, ramp);
@@ -590,7 +1353,7 @@ function playAudioDelta(b64, byteOffset = 0) {
   // Route through the persistent pitch/vibrato/gain chain instead of speaker
   // directly. pitchNode is shared across chunks so SoundTouch state survives
   // perso switches — only its params change.
-  src.connect(pitchNode);
+  src.connect(pitchNode || masterGain || audioCtx.destination);
   src.onended = () => activeSources.delete(src);
   activeSources.add(src);
   const now = audioCtx.currentTime;
@@ -710,10 +1473,13 @@ function appendTranscript(kind, text) {
 }
 
 async function stopSession() {
+  bookAutoReading = false;
+  autoStartPending = false;
   wsSend({ type: "stop" });
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
   if (ws) { ws.close(); ws = null; }
   isRunning = false;
+  renderBookControls();
   setStatus("idle");
 }
 
