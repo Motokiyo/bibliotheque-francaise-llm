@@ -47,6 +47,7 @@ let ignoreNextResponseDone = false;
 let ignoreResponseDoneUntil = 0;
 let currentAnnotations = null;
 let isRunning = false;
+let appConfig = {};
 // Audio output chain (built once at session start):
 //   BufferSource → pitchNode → vibratoGain → masterGain → destination
 // pitchNode = SoundTouch streaming worklet (pitch+tempo, decoupled)
@@ -72,10 +73,12 @@ let lastBookSelection = null;
 let pendingBookSegment = null;
 let currentBookSegment = null;
 let bookRealtimeToken = 0;
-let bookNextRequested = false;
+let bookAudioWatchKey = null;
+let bookPendingResponseDone = false;
 
 async function init() {
   const cfg = await (await fetch("/api/config")).json();
+  appConfig = cfg;
   $("model-badge").textContent = cfg.model + " · " + cfg.voice + (cfg.has_key ? "" : " · NO KEY");
   if (!cfg.has_key) {
     setStatus("error");
@@ -84,6 +87,10 @@ async function init() {
   $("model").value = cfg.model;
   if ($("model").querySelector('option[value="gpt-realtime"]')) $("model").value = "gpt-realtime";
   $("voice").value = cfg.voice;
+  if (!cfg.allow_robot && $("robot-enabled")) {
+    $("robot-enabled").checked = false;
+    $("robot-enabled").disabled = true;
+  }
 
   await loadLibrary();
   bindUI();
@@ -622,7 +629,7 @@ async function startSession() {
           reasoning_effort: $("reasoning").value,
           enable_preambles: $("preambles").checked,
           dsp_enabled: $("dsp-enabled").checked,
-          robot_enabled: $("robot-enabled").checked,
+          robot_enabled: Boolean(appConfig.allow_robot) && $("robot-enabled").checked,
         },
       });
     };
@@ -749,28 +756,30 @@ async function ensureBookRealtimeSession() {
   return false;
 }
 
-async function pushBookRealtimeSegment(segment) {
+async function pushBookRealtimeSegment(segment, { prefetch = false } = {}) {
   if (!currentBook || !segment) return;
-  currentBookSegment = segment;
   pendingBookSegment = segment;
+  if (!prefetch) currentBookSegment = segment;
   const ready = await ensureBookRealtimeSession();
   if (!ready) return;
-  pendingBookSegment = null;
-  const token = ++bookRealtimeToken;
-  bookNextRequested = false;
+  if (!prefetch) pendingBookSegment = null;
+  const token = prefetch ? bookRealtimeToken : ++bookRealtimeToken;
   await ensureAudioOutput();
-  currentChapterIndex = segment.chapterIndex;
-  $("chapter-select").value = String(currentChapterIndex);
-  renderFullText();
-  saveBookProgress(segment.chapterIndex, segment.startOffset);
-  bookReadingChapterIndex = segment.chapterIndex;
-  bookReadingStartOffset = segment.startOffset;
-  bookSegmentEndOffset = segment.endOffset;
+  if (!prefetch) {
+    currentChapterIndex = segment.chapterIndex;
+    $("chapter-select").value = String(currentChapterIndex);
+    renderFullText();
+    saveBookProgress(segment.chapterIndex, segment.startOffset);
+    bookReadingChapterIndex = segment.chapterIndex;
+    bookReadingStartOffset = segment.startOffset;
+    bookSegmentEndOffset = segment.endOffset;
+  }
   bookPlayerState = "playing";
   bookAutoReading = true;
   renderBookControls();
   wsSend({ type: "push_scene", scene_text: segment.text });
   trace("book_segment_push", {
+    prefetch,
     chapterIndex: segment.chapterIndex,
     startOffset: segment.startOffset,
     endOffset: segment.endOffset,
@@ -1063,6 +1072,8 @@ function pauseBookPlayback() {
   bookRealtimeToken += 1;
   pendingBookSegment = null;
   currentBookSegment = null;
+  bookAudioWatchKey = null;
+  bookPendingResponseDone = false;
   stopTtsSource();
   cancelCurrentResponseImmediately();
   renderBookControls();
@@ -1075,6 +1086,8 @@ function stopBookPlayback() {
   bookRealtimeToken += 1;
   pendingBookSegment = null;
   currentBookSegment = null;
+  bookAudioWatchKey = null;
+  bookPendingResponseDone = false;
   stopTtsSource();
   cancelCurrentResponseImmediately();
   saveBookProgress(currentChapterIndex, 0);
@@ -1126,6 +1139,9 @@ function resetBookSegmentState() {
   bookSegmentEndOffset = 0;
   bookTranscriptChars = 0;
   currentBookSegment = null;
+  pendingBookSegment = null;
+  bookAudioWatchKey = null;
+  bookPendingResponseDone = false;
 }
 
 function updateProgressFromTranscript(extraChars = 0) {
@@ -1145,25 +1161,48 @@ function cancelCurrentResponseImmediately() {
 }
 
 function waitForBookAudioEnd(token, segment) {
+  const watchKey = `${token}:${segment.chapterIndex}:${segment.startOffset}:${segment.endOffset}`;
+  if (bookAudioWatchKey === watchKey) return;
+  bookAudioWatchKey = watchKey;
   const started = performance.now();
+  const targetEndTime = audioCtx ? playbackTime : 0;
+  let nextRequested = false;
+  let requestedNext = null;
   const check = () => {
-    if (token !== bookRealtimeToken || bookPlayerState !== "playing" || currentBookSegment !== segment) return;
-    const remaining = audioCtx ? playbackTime - audioCtx.currentTime : 0;
-    const next = followingSegment(segment);
-    if (next && !bookNextRequested && remaining <= 15) {
-      bookNextRequested = true;
-      saveBookProgress(segment.chapterIndex, segment.endOffset);
-      pushBookRealtimeSegment(next);
+    if (token !== bookRealtimeToken || bookPlayerState !== "playing") {
+      if (bookAudioWatchKey === watchKey) bookAudioWatchKey = null;
       return;
     }
-    const audioDone = activeSources.size === 0 && remaining <= 0.08;
+    const remaining = audioCtx ? targetEndTime - audioCtx.currentTime : 0;
+    const next = followingSegment(segment);
+    if (next && !nextRequested && remaining <= 15) {
+      nextRequested = true;
+      requestedNext = next;
+      pushBookRealtimeSegment(next, { prefetch: true });
+    }
+    const audioDone = remaining <= 0.08;
     const timedOut = performance.now() - started > Math.max(20000, segment.text.length * 180);
     if (!audioDone && !timedOut) {
       setTimeout(check, 120);
       return;
     }
+    if (bookAudioWatchKey === watchKey) bookAudioWatchKey = null;
     saveBookProgress(segment.chapterIndex, segment.endOffset);
-    if (next) {
+    if (requestedNext) {
+      currentBookSegment = requestedNext;
+      pendingBookSegment = null;
+      currentChapterIndex = requestedNext.chapterIndex;
+      $("chapter-select").value = String(currentChapterIndex);
+      renderFullText();
+      bookReadingChapterIndex = requestedNext.chapterIndex;
+      bookReadingStartOffset = requestedNext.startOffset;
+      bookSegmentEndOffset = requestedNext.endOffset;
+      renderBookControls();
+      if (bookPendingResponseDone) {
+        bookPendingResponseDone = false;
+        waitForBookAudioEnd(token, requestedNext);
+      }
+    } else if (next) {
       pushBookRealtimeSegment(next);
     } else {
       currentBookSegment = null;
@@ -1229,6 +1268,11 @@ function onWsMessage(ev) {
         break;
       }
       if (currentBook && currentBookSegment && bookPlayerState === "playing") {
+        if (bookAudioWatchKey && pendingBookSegment) {
+          bookPendingResponseDone = true;
+          renderBookControls();
+          break;
+        }
         waitForBookAudioEnd(bookRealtimeToken, currentBookSegment);
       }
       break;

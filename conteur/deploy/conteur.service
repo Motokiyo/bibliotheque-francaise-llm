@@ -1,0 +1,34 @@
+[Unit]
+Description=Eiffel AI Conteur
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=conteur
+Group=conteur
+WorkingDirectory=/srv/conteur/Bibliotheque-LLM-FR/conteur
+EnvironmentFile=/etc/conteur/conteur.env
+ExecStart=/srv/conteur/Bibliotheque-LLM-FR/conteur/.venv/bin/uvicorn standalone.server:app --host ${CONTEUR_HOST} --port ${CONTEUR_PORT}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+# Security hardening. Keep this service isolated from the rest of the VPS.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/conteur/Bibliotheque-LLM-FR/conteur/.cache /tmp
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Practical limits for a small family-facing service.
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

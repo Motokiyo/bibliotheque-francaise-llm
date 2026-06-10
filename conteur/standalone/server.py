@@ -57,6 +57,18 @@ logger = logging.getLogger("conteur.server")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_MODEL = os.getenv("MODEL", "gpt-realtime-2")
 DEFAULT_VOICE = os.getenv("VOICE", "cedar")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+PRODUCTION = ENVIRONMENT in {"prod", "production"}
+ALLOW_ROBOT = os.getenv("CONTEUR_ENABLE_ROBOT", "0" if PRODUCTION else "1") == "1"
+ENABLE_TTS_ENDPOINT = os.getenv("CONTEUR_ENABLE_TTS_ENDPOINT", "0" if PRODUCTION else "1") == "1"
+ALLOWED_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CONTEUR_ALLOWED_ORIGINS",
+        "https://conteur.eiffelai.io,http://127.0.0.1:7860,http://localhost:7860",
+    ).split(",")
+    if origin.strip()
+}
 BOOKS_DIR = PROJECT_ROOT / "data" / "books"
 TTS_CACHE_DIR = PROJECT_ROOT / ".cache" / "tts"
 TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -171,6 +183,22 @@ async def config() -> dict:
         "model": DEFAULT_MODEL,
         "voice": DEFAULT_VOICE,
         "has_key": bool(OPENAI_KEY),
+        "environment": ENVIRONMENT,
+        "allow_robot": ALLOW_ROBOT,
+        "tts_endpoint": ENABLE_TTS_ENDPOINT,
+    }
+
+
+@app.get("/api/status")
+async def status() -> dict:
+    return {
+        "ok": True,
+        "model": DEFAULT_MODEL,
+        "voice": DEFAULT_VOICE,
+        "has_key": bool(OPENAI_KEY),
+        "environment": ENVIRONMENT,
+        "allow_robot": ALLOW_ROBOT,
+        "tts_endpoint": ENABLE_TTS_ENDPOINT,
     }
 
 
@@ -246,6 +274,8 @@ async def post_trace(request: Request) -> dict:
 
 @app.post("/api/tts")
 async def post_tts(request: Request) -> Response:
+    if not ENABLE_TTS_ENDPOINT:
+        raise HTTPException(status_code=404, detail="TTS endpoint disabled")
     if not OPENAI_KEY:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY missing in .env")
     body = await request.json()
@@ -289,6 +319,11 @@ async def post_tts(request: Request) -> Response:
 
 @app.websocket("/ws/session")
 async def ws_session(ws: WebSocket) -> None:
+    origin = (ws.headers.get("origin") or "").rstrip("/")
+    if PRODUCTION and origin not in ALLOWED_ORIGINS:
+        logger.warning("WS rejected from origin=%r client=%s", origin, ws.client)
+        await ws.close(code=1008)
+        return
     await ws.accept()
     logger.info("WS accepted from %s", ws.client)
     if not OPENAI_KEY:
@@ -574,7 +609,7 @@ async def ws_session(ws: WebSocket) -> None:
                     logger.info("WS start received: oeuvre_id=%s", oeuvre_id)
                     settings = data.get("settings", {})
                     dsp_enabled["on"] = bool(settings.get("dsp_enabled", True))
-                    robot_enabled["on"] = bool(settings.get("robot_enabled", True))
+                    robot_enabled["on"] = bool(settings.get("robot_enabled", True)) and ALLOW_ROBOT
                     if oeuvre_id.startswith("book:"):
                         current_oeuvre = _book_as_oeuvre(_load_book(oeuvre_id.split(":", 1)[1]))
                     else:

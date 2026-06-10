@@ -2,14 +2,17 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>Cedar Conteur — Bibliothèque française pour LLM</title>
+  <title>Eiffel AI / Conteur — Bibliothèque française pour LLM</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="/static/style.css?v=20260610-2121">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=20260611-frontend-eiffel">
 </head>
 <body>
   <header>
     <button id="toggle-menu" class="toggle-menu" type="button" onclick="document.body.classList.toggle('menu-open');">Menu</button>
-    <h1>Cedar Conteur</h1>
+    <h1>Eiffel AI / Conteur</h1>
     <span id="status" class="status idle">idle</span>
     <span id="model-badge"></span>
     <button id="toggle-annotations" type="button" onclick="const p=document.querySelector('.annotations'); if(p){p.style.display='block'; document.body.classList.add('annotations-visible'); document.body.classList.remove('annotations-hidden');}">Annotations</button>
@@ -129,6 +132,6 @@
     <div class="line cedar"></div>
   </div>
 
-  <script src="/static/app.js?v=20260610-2345" type="module"></script>
+  <script src="/static/app.js?v=20260611-prod-safe-reader" type="module"></script>
 </body>
 </html>
