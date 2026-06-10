@@ -12,6 +12,9 @@ Internet
   -> systemd service running Uvicorn as a dedicated non-root user
 ```
 
+On the current Hetzner host, Nginx must bind HTTPS to `89.167.3.104:443`
+explicitly because Tailscale also owns port 443 on its own interfaces.
+
 ## Security principles
 
 - The app must bind to `127.0.0.1`, never `0.0.0.0`, in production.
