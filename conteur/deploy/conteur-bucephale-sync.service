@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync live Bucéphale chapters for Conteur
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/conteur-sync-bucephale

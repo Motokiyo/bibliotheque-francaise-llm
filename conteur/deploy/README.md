@@ -37,6 +37,8 @@ explicitly because Tailscale also owns port 443 on its own interfaces.
 - `nginx-conteur.eiffelai.io.conf`: Nginx reverse proxy with WebSocket headers.
 - `rollback.md`: precise rollback procedure.
 - `smoke-test.md`: checks to run after staging or production deployment.
+- `sync-bucephale.sh` + `conteur-bucephale-sync.*`: root-side mirror from the
+  private Syncthing vault into an app-readable live book directory.
 
 ## Suggested server layout
 
@@ -94,7 +96,19 @@ sudo systemctl enable --now conteur.service
 sudo systemctl status conteur.service
 ```
 
-6. Create the Basic Auth file:
+6. Install the live Bucéphale sync. This keeps the app user away from
+   `/root/vault` while still exposing updated chapters to the reader:
+
+```bash
+sudo install -o root -g root -m 0755 conteur/deploy/sync-bucephale.sh /usr/local/sbin/conteur-sync-bucephale
+sudo install -o root -g root -m 0644 conteur/deploy/conteur-bucephale-sync.service /etc/systemd/system/conteur-bucephale-sync.service
+sudo install -o root -g root -m 0644 conteur/deploy/conteur-bucephale-sync.timer /etc/systemd/system/conteur-bucephale-sync.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now conteur-bucephale-sync.timer
+sudo systemctl start conteur-bucephale-sync.service
+```
+
+7. Create the Basic Auth file:
 
 ```bash
 sudo apt-get install apache2-utils
@@ -103,7 +117,7 @@ sudo chown root:www-data /etc/nginx/.htpasswd-conteur
 sudo chmod 0640 /etc/nginx/.htpasswd-conteur
 ```
 
-7. Install the temporary HTTP-only Nginx vhost after DNS points
+8. Install the temporary HTTP-only Nginx vhost after DNS points
    `conteur.eiffelai.io` at the server:
 
 ```bash
@@ -113,13 +127,13 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-8. Issue the HTTPS certificate:
+9. Issue the HTTPS certificate:
 
 ```bash
 sudo certbot certonly --webroot -w /var/www/html -d conteur.eiffelai.io
 ```
 
-9. Replace the bootstrap vhost with the final HTTPS/WSS reverse proxy:
+10. Replace the bootstrap vhost with the final HTTPS/WSS reverse proxy:
 
 ```bash
 sudo install -o root -g root -m 0644 conteur/deploy/nginx-conteur.eiffelai.io.conf /etc/nginx/sites-available/conteur.eiffelai.io
@@ -127,7 +141,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-10. Run `smoke-test.md`.
+11. Run `smoke-test.md`.
 
 ## Updating the deployed code
 

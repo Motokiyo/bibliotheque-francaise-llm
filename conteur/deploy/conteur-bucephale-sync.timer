@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync live Bucéphale chapters for Conteur every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=conteur-bucephale-sync.service
+
+[Install]
+WantedBy=timers.target

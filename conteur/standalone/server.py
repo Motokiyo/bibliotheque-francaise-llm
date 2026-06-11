@@ -73,9 +73,13 @@ ALLOWED_ORIGINS = {
 BOOKS_DIR = PROJECT_ROOT / "data" / "books"
 BUCEPHALE_DIR = Path(os.getenv(
     "CONTEUR_BUCEPHALE_DIR",
-    "/root/vault/1 Projets/Chroniques-de-Bucéphale",
+    "/srv/conteur/live/chroniques-de-bucephale",
 ))
-if not BUCEPHALE_DIR.exists():
+try:
+    bucephale_exists = BUCEPHALE_DIR.exists()
+except PermissionError:
+    bucephale_exists = False
+if not bucephale_exists:
     local_bucephale = Path(
         "/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/Chroniques-de-Bucéphale"
     )
