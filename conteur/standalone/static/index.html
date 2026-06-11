@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260611-frontend-eiffel">
+  <link rel="stylesheet" href="/static/style.css?v=20260611-galileo-shelf">
 </head>
 <body>
   <header>
@@ -26,6 +26,8 @@
       <select id="genre-filter">
         <option value="">tous genres</option>
       </select>
+      <h2>Lectures en cours</h2>
+      <div id="reading-shelf" class="reading-shelf" aria-label="Lectures en cours"></div>
       <h2>Livres</h2>
       <ul id="books-list"></ul>
       <h2>Théâtre</h2>
@@ -132,6 +134,6 @@
     <div class="line cedar"></div>
   </div>
 
-  <script src="/static/app.js?v=20260611-prod-safe-reader" type="module"></script>
+  <script src="/static/app.js?v=20260611-galileo-shelf" type="module"></script>
 </body>
 </html>

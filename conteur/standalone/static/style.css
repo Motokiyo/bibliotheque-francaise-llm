@@ -253,6 +253,98 @@ h3 {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+.reading-shelf {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 126px;
+  margin: 0 0 22px;
+  padding: 10px 8px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-bottom: 3px solid rgba(30, 42, 58, 0.22);
+  background:
+    linear-gradient(to bottom, rgba(250, 246, 238, 0.74), rgba(235, 226, 211, 0.72));
+}
+
+.shelf-empty {
+  align-self: center;
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.book-spine {
+  position: relative;
+  flex: 0 0 42px;
+  min-width: 42px;
+  height: 102px;
+  min-height: 102px;
+  padding: 7px 4px;
+  border-color: rgba(30, 42, 58, 0.26);
+  background: var(--paper);
+  color: var(--ink);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  overflow: hidden;
+}
+
+.book-spine:nth-child(3n + 1) {
+  background: #efe5d3;
+}
+
+.book-spine:nth-child(3n + 2) {
+  background: #e5dccd;
+}
+
+.book-spine:nth-child(3n) {
+  background: #ead8c8;
+}
+
+.book-spine::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: calc(var(--spine-progress, 0) * 1%);
+  max-height: 100%;
+  background: rgba(184, 94, 62, 0.16);
+  pointer-events: none;
+}
+
+.book-spine.active {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  box-shadow: inset 0 0 0 2px rgba(184, 94, 62, 0.18);
+}
+
+.spine-title {
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-height: 72px;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 0.82rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.spine-progress {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-inline-start: auto;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.52rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .book-controls {
   position: sticky;
   top: 0;

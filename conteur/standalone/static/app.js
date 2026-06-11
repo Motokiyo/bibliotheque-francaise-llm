@@ -75,6 +75,7 @@ let currentBookSegment = null;
 let bookRealtimeToken = 0;
 let bookAudioWatchKey = null;
 let bookPendingResponseDone = false;
+const readingShelfKey = "cedar-conteur.reading-shelf";
 
 async function init() {
   const cfg = await (await fetch("/api/config")).json();
@@ -108,19 +109,99 @@ async function loadLibrary() {
     genreSel.appendChild(opt);
   }
   renderBooks();
+  renderReadingShelf();
   renderOeuvres();
 }
 
 function renderBooks() {
   const ul = $("books-list");
+  const q = ($("search")?.value || "").toLowerCase();
   ul.replaceChildren();
   for (const b of books) {
+    const haystack = `${b.id} ${b.title || ""} ${b.author || ""}`.toLowerCase();
+    if (q && !haystack.includes(q)) continue;
     const li = document.createElement("li");
     li.textContent = `${b.title || b.id}${b.author ? " — " + b.author : ""}`;
     li.dataset.id = b.id;
     if (currentBook && currentBook.id === b.id) li.classList.add("active");
     li.onclick = () => loadBook(b.id);
     ul.appendChild(li);
+  }
+}
+
+function loadReadingShelf() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(readingShelfKey) || "[]");
+    return Array.isArray(ids) ? ids.filter(Boolean) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveReadingShelf(ids) {
+  localStorage.setItem(readingShelfKey, JSON.stringify([...new Set(ids.filter(Boolean))]));
+}
+
+function rememberReadingBook(bookId) {
+  const ids = loadReadingShelf().filter(id => id !== bookId);
+  ids.unshift(bookId);
+  saveReadingShelf(ids.slice(0, 12));
+  renderReadingShelf();
+}
+
+function readingProgressFor(book) {
+  if (!book) return { chapterIndex: 0, charOffset: 0, percent: 0, label: "0%" };
+  const saved = loadBookProgress(book.id) || {};
+  const chapterIndex = Math.max(0, Math.min(saved.chapterIndex || 0, (book.chapters?.length || 1) - 1));
+  const chapter = book.chapters?.[chapterIndex] || { text: "", roman: saved.chapterRoman || "" };
+  const charOffset = Math.max(0, Math.min(saved.charOffset || 0, chapter.text.length));
+  const percent = chapter.text.length
+    ? Math.round((charOffset / chapter.text.length) * 100)
+    : Math.max(0, Math.min(saved.percent || 0, 100));
+  return {
+    chapterIndex,
+    charOffset,
+    percent,
+    label: saved.label || `${chapter.roman || chapterIndex + 1} · ${percent}%`,
+  };
+}
+
+function renderReadingShelf() {
+  const shelf = $("reading-shelf");
+  if (!shelf) return;
+  shelf.replaceChildren();
+  const ids = loadReadingShelf();
+  const visibleBooks = ids
+    .map(id => {
+      const meta = books.find(b => b.id === id);
+      return currentBook && currentBook.id === id ? {...(meta || {}), ...currentBook} : meta;
+    })
+    .filter(Boolean);
+  if (visibleBooks.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "shelf-empty";
+    empty.textContent = "Aucune lecture commencée";
+    shelf.appendChild(empty);
+    return;
+  }
+  for (const book of visibleBooks) {
+    const progress = readingProgressFor(book);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "book-spine";
+    if (currentBook && currentBook.id === book.id) btn.classList.add("active");
+    btn.dataset.progress = progress.percent;
+    btn.style.setProperty("--spine-progress", String(progress.percent));
+    btn.title = `${book.title || book.id} — ${progress.label}`;
+    const title = document.createElement("span");
+    title.className = "spine-title";
+    title.textContent = book.title || book.id;
+    const progressEl = document.createElement("span");
+    progressEl.className = "spine-progress";
+    progressEl.textContent = progress.label;
+    btn.append(title, progressEl);
+    btn.onclick = () => loadBook(book.id);
+    shelf.appendChild(btn);
   }
 }
 
@@ -141,11 +222,18 @@ function saveBookProgress(chapterIndex = currentChapterIndex, charOffset = 0) {
   const chapter = currentBook.chapters[chapterIndex];
   if (!chapter) return;
   const safeOffset = Math.max(0, Math.min(charOffset || 0, chapter.text.length));
+  const percent = chapter.text.length ? Math.round((safeOffset / chapter.text.length) * 100) : 0;
+  const label = `${chapter.roman || chapterIndex + 1} · ${percent}%`;
   localStorage.setItem(progressKey(currentBook.id), JSON.stringify({
     chapterIndex,
     charOffset: safeOffset,
+    chapterRoman: chapter.roman || String(chapterIndex + 1),
+    chapterTitle: chapter.title || "",
+    percent,
+    label,
     updatedAt: new Date().toISOString(),
   }));
+  rememberReadingBook(currentBook.id);
   updateBookProgressLabel(chapterIndex, safeOffset);
 }
 
@@ -248,6 +336,7 @@ async function loadBook(id) {
     currentBook = r.book;
     currentOeuvre = r.oeuvre;
     currentAnnotations = r.annotations;
+    rememberReadingBook(currentBook.id);
     currentChapterIndex = currentBookProgress().chapterIndex;
     bookPlayerState = "stopped";
     bookAutoReading = false;
@@ -261,6 +350,7 @@ async function loadBook(id) {
     $("start").disabled = false;
     renderOeuvres();
     renderBooks();
+    renderReadingShelf();
     closeResponsiveMenu();
     setStatus("idle");
   } catch (e) {
@@ -292,9 +382,11 @@ function renderBookControls() {
     sel.appendChild(opt);
   });
   sel.value = String(currentChapterIndex);
+  const saved = currentBookProgress();
+  const hasSavedProgress = saved.chapterIndex > 0 || saved.charOffset > 0;
   $("book-prev").disabled = currentChapterIndex <= 0;
   $("book-play").disabled = false;
-  $("book-play").textContent = bookPlayerState === "paused" ? "Reprendre" : "Démarrer";
+  $("book-play").textContent = bookPlayerState === "paused" || hasSavedProgress ? "Reprendre" : "Démarrer";
   $("book-pause").disabled = bookPlayerState !== "playing" && bookPlayerState !== "loading";
   $("book-next").disabled = currentChapterIndex >= currentBook.chapters.length - 1;
   $("book-stop").disabled = bookPlayerState === "stopped";
@@ -478,7 +570,10 @@ function renderPronRow(mot, pron) {
 }
 
 function bindUI() {
-  $("search").oninput = renderOeuvres;
+  $("search").oninput = () => {
+    renderBooks();
+    renderOeuvres();
+  };
   $("genre-filter").onchange = renderOeuvres;
   $("toggle-menu").onclick = () => document.body.classList.toggle("menu-open");
   $("close-menu").onclick = closeResponsiveMenu;
