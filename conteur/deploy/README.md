@@ -128,3 +128,14 @@ sudo systemctl reload nginx
 ```
 
 10. Run `smoke-test.md`.
+
+## Updating the deployed code
+
+When updating an existing deployment, preserve runtime directories created on the
+server:
+
+```bash
+rsync -a --delete --exclude .venv --exclude .cache ./ /srv/conteur/Bibliotheque-LLM-FR/
+sudo chown -R conteur:conteur /srv/conteur/Bibliotheque-LLM-FR
+sudo systemctl restart conteur.service
+```
