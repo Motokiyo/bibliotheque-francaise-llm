@@ -253,6 +253,16 @@ h3 {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+#books-list li.has-new::after {
+  content: "nouveau";
+  float: right;
+  color: var(--accent-deep);
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .reading-shelf {
   display: flex;
   align-items: stretch;
@@ -320,6 +330,19 @@ h3 {
   box-shadow: inset 0 0 0 2px rgba(184, 94, 62, 0.18);
 }
 
+.book-spine.has-new::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
 .spine-title {
   position: relative;
   z-index: 1;
@@ -343,6 +366,30 @@ h3 {
   font-size: 0.52rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.book-update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(184, 94, 62, 0.42);
+  background: #ead8c8;
+  color: var(--accent-deep);
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.book-update-banner button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .book-controls {

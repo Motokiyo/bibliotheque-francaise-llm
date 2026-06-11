@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -70,6 +71,16 @@ ALLOWED_ORIGINS = {
     if origin.strip()
 }
 BOOKS_DIR = PROJECT_ROOT / "data" / "books"
+BUCEPHALE_DIR = Path(os.getenv(
+    "CONTEUR_BUCEPHALE_DIR",
+    "/root/vault/1 Projets/Chroniques-de-Bucéphale",
+))
+if not BUCEPHALE_DIR.exists():
+    local_bucephale = Path(
+        "/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/Chroniques-de-Bucéphale"
+    )
+    if local_bucephale.exists():
+        BUCEPHALE_DIR = local_bucephale
 TTS_CACHE_DIR = PROJECT_ROOT / ".cache" / "tts"
 TTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -97,11 +108,87 @@ logger.info("Trace file: %s", TRACE_FILE)
 seed_default_annotations()
 
 
+def _book_version_from_paths(paths: list[Path]) -> str:
+    h = hashlib.sha256()
+    for path in sorted(paths):
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        h.update(str(path).encode("utf-8"))
+        h.update(str(stat.st_mtime_ns).encode("ascii"))
+        h.update(str(stat.st_size).encode("ascii"))
+    return h.hexdigest()[:16]
+
+
+def _strip_markdown_boilerplate(text: str) -> str:
+    text = re.sub(r"^---\n.*?\n---\n", "", text, flags=re.DOTALL)
+    text = re.sub(r"!\[[^\]]*]\([^)]+\)", "", text)
+    text = re.sub(r"\[\[([^]|]+)(?:\|([^]]+))?]]", lambda m: m.group(2) or m.group(1), text)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _title_from_markdown(path: Path, raw: str) -> str:
+    for line in raw.splitlines():
+        m = re.match(r"^#\s+(.+?)\s*$", line)
+        if m:
+            return m.group(1).strip()
+    title = re.sub(r"^\d+[:.-]?\d*[-: ]*", "", path.stem)
+    return title.replace("_", " ").strip() or path.stem
+
+
+def _load_bucephale_book() -> dict:
+    files = sorted(
+        path for path in BUCEPHALE_DIR.glob("*.md")
+        if path.is_file() and not path.name.startswith(".") and path.name.upper() not in {"INDEX.md", "README.md"}
+    )
+    chapters = []
+    for idx, path in enumerate(files, start=1):
+        raw = path.read_text(encoding="utf-8")
+        text = _strip_markdown_boilerplate(raw)
+        if not text:
+            continue
+        chapters.append({
+            "number": idx,
+            "roman": str(idx),
+            "title": _title_from_markdown(path, raw),
+            "text": text,
+            "source_url": str(path),
+        })
+    return {
+        "id": "chroniques-de-bucephale",
+        "title": "Les Chroniques de Bucéphale",
+        "author": "Alexandre Ferran",
+        "translator": "",
+        "source": "Manuscrit vivant",
+        "source_url": str(BUCEPHALE_DIR),
+        "license": "Texte privé, usage familial",
+        "version": _book_version_from_paths(files),
+        "live": True,
+        "chapters": chapters,
+    }
+
+
+def _static_book_version(path: Path) -> str:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return ""
+    return hashlib.sha256(f"{path.name}:{stat.st_mtime_ns}:{stat.st_size}".encode("utf-8")).hexdigest()[:16]
+
+
 def _load_book(book_id: str) -> dict:
+    if book_id == "chroniques-de-bucephale":
+        return _load_bucephale_book()
     path = BOOKS_DIR / f"{book_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Book not found: {book_id}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    book = json.loads(path.read_text(encoding="utf-8"))
+    book.setdefault("version", _static_book_version(path))
+    book.setdefault("live", False)
+    return book
 
 
 def _book_as_oeuvre(book: dict) -> dict:
@@ -124,12 +211,25 @@ def _book_as_oeuvre(book: dict) -> dict:
 
 def _list_books() -> list[dict]:
     books = []
+    if BUCEPHALE_DIR.exists():
+        live = _load_bucephale_book()
+        books.append({
+            "id": live["id"],
+            "title": live["title"],
+            "author": live["author"],
+            "version": live.get("version", ""),
+            "chapter_count": len(live.get("chapters", [])),
+            "live": True,
+        })
     for path in sorted(BOOKS_DIR.glob("*.json")):
         book = json.loads(path.read_text(encoding="utf-8"))
         books.append({
             "id": book.get("id", path.stem),
             "title": book.get("title", path.stem),
             "author": book.get("author", ""),
+            "version": book.get("version") or _static_book_version(path),
+            "chapter_count": len(book.get("chapters", [])),
+            "live": False,
         })
     return books
 
@@ -223,6 +323,8 @@ async def get_book(book_id: str) -> dict:
             "translator": book.get("translator", ""),
             "source": book.get("source", ""),
             "source_url": book.get("source_url", ""),
+            "version": book.get("version", ""),
+            "live": bool(book.get("live", False)),
             "chapters": book.get("chapters", []),
         },
         "oeuvre": oeuvre,

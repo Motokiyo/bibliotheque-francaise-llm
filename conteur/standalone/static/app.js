@@ -77,6 +77,10 @@ let bookAudioWatchKey = null;
 let bookPendingResponseDone = false;
 const readingShelfKey = "cedar-conteur.reading-shelf";
 
+function seenBookKey(bookId) {
+  return `cedar-conteur.book-seen.${bookId}`;
+}
+
 async function init() {
   const cfg = await (await fetch("/api/config")).json();
   appConfig = cfg;
@@ -124,8 +128,54 @@ function renderBooks() {
     li.textContent = `${b.title || b.id}${b.author ? " — " + b.author : ""}`;
     li.dataset.id = b.id;
     if (currentBook && currentBook.id === b.id) li.classList.add("active");
+    if (bookHasNewChapter(b)) li.classList.add("has-new");
     li.onclick = () => loadBook(b.id);
     ul.appendChild(li);
+  }
+}
+
+function loadSeenBook(bookId) {
+  try {
+    return JSON.parse(localStorage.getItem(seenBookKey(bookId)) || "null") || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveSeenBook(book) {
+  if (!book?.id) return;
+  localStorage.setItem(seenBookKey(book.id), JSON.stringify({
+    version: book.version || "",
+    chapterCount: book.chapters?.length || book.chapter_count || 0,
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+function bookHasNewChapter(book) {
+  if (!book?.id || !book.version) return false;
+  const seen = loadSeenBook(book.id);
+  if (!seen.version || seen.version === book.version) return false;
+  const currentCount = book.chapter_count || book.chapters?.length || 0;
+  return currentCount > (seen.chapterCount || 0);
+}
+
+function showBookUpdateBanner(book, previous = {}) {
+  const banner = $("book-update-banner");
+  if (!banner || !book) return;
+  const count = book.chapters?.length || 0;
+  const delta = Math.max(1, count - (previous.chapterCount || count - 1));
+  $("book-update-message").textContent =
+    `${delta > 1 ? "Nouveaux chapitres accessibles" : "Nouveau chapitre accessible"} dans ${book.title}.`;
+  banner.hidden = false;
+}
+
+function hideBookUpdateBanner({ markSeen = false } = {}) {
+  const banner = $("book-update-banner");
+  if (banner) banner.hidden = true;
+  if (markSeen && currentBook) {
+    saveSeenBook(currentBook);
+    renderBooks();
+    renderReadingShelf();
   }
 }
 
@@ -190,6 +240,7 @@ function renderReadingShelf() {
     btn.type = "button";
     btn.className = "book-spine";
     if (currentBook && currentBook.id === book.id) btn.classList.add("active");
+    if (bookHasNewChapter(book)) btn.classList.add("has-new");
     btn.dataset.progress = progress.percent;
     btn.style.setProperty("--spine-progress", String(progress.percent));
     btn.title = `${book.title || book.id} — ${progress.label}`;
@@ -333,6 +384,7 @@ async function loadBook(id) {
     if (ws || isRunning) stopSession();
     stopTtsSource();
     const r = await (await fetch("/api/book/" + encodeURIComponent(id))).json();
+    const previousSeen = loadSeenBook(id);
     currentBook = r.book;
     currentOeuvre = r.oeuvre;
     currentAnnotations = r.annotations;
@@ -351,6 +403,12 @@ async function loadBook(id) {
     renderOeuvres();
     renderBooks();
     renderReadingShelf();
+    if (previousSeen.version && previousSeen.version !== currentBook.version && currentBook.chapters.length > (previousSeen.chapterCount || 0)) {
+      showBookUpdateBanner(currentBook, previousSeen);
+    } else {
+      hideBookUpdateBanner();
+      saveSeenBook(currentBook);
+    }
     closeResponsiveMenu();
     setStatus("idle");
   } catch (e) {
@@ -603,6 +661,7 @@ function bindUI() {
     document.body.classList.toggle("player-collapsed");
     $("toggle-player").textContent = document.body.classList.contains("player-collapsed") ? "Lecteur" : "Masquer";
   };
+  $("book-update-dismiss").onclick = () => hideBookUpdateBanner({ markSeen: true });
 
   $("speed").oninput = (e) => {
     $("speed-val").textContent = parseFloat(e.target.value).toFixed(2);

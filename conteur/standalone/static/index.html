@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20260611-galileo-shelf">
+  <link rel="stylesheet" href="/static/style.css?v=20260611-live-books">
 </head>
 <body>
   <header>
@@ -37,6 +37,10 @@
     <section class="text-pane">
       <h2 id="oeuvre-title">Choisis une œuvre</h2>
       <p id="oeuvre-meta" class="meta"></p>
+      <div id="book-update-banner" class="book-update-banner" hidden>
+        <span id="book-update-message"></span>
+        <button id="book-update-dismiss" type="button">Vu</button>
+      </div>
       <div id="book-controls" class="book-controls" hidden>
         <button id="toggle-player" class="toggle-player" type="button" title="Masquer le lecteur">Masquer</button>
         <select id="chapter-select"></select>
@@ -134,6 +138,6 @@
     <div class="line cedar"></div>
   </div>
 
-  <script src="/static/app.js?v=20260611-galileo-shelf" type="module"></script>
+  <script src="/static/app.js?v=20260611-live-books" type="module"></script>
 </body>
 </html>
