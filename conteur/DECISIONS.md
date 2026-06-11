@@ -2,6 +2,54 @@
 
 ## VALIDÉ
 
+### 11/06/2026 — `conteur.eiffelai.io` déployé sur Hetzner avec isolation serveur
+
+Le conteur famille est déployé sur `https://conteur.eiffelai.io/`, derrière Nginx HTTPS/WSS et Basic Auth. DNS : `conteur.eiffelai.io A 89.167.3.104`.
+
+Architecture validée :
+- Uvicorn/FastAPI supervisé par `conteur.service` ;
+- bind applicatif limité à `127.0.0.1:7860` ;
+- Nginx reverse proxy HTTPS/WSS vers Uvicorn ;
+- Nginx écoute explicitement `89.167.3.104:443` parce que Tailscale occupe déjà 443 sur d'autres interfaces ;
+- Basic Auth user `Galiléo` ;
+- Robot désactivé en production ;
+- endpoint legacy `/api/tts` désactivé en production ;
+- OpenAI Realtime `gpt-realtime` + voix `cedar` V1 obligatoire.
+
+### 11/06/2026 — Bibliothèque Galiléo : étagère, reprise par livre, livres complets audités
+
+Le lecteur garde une progression par livre en `localStorage`, affiche une étagère `Lectures en cours`, et permet de basculer entre livres sans perdre l'endroit atteint.
+
+Livres validés au déploiement :
+- *L'île au trésor* : 34 chapitres ;
+- *Lancelot ou le Chevalier de la charrette* : 21 chapitres ;
+- *Yvain ou le Chevalier au lion* : 23 sections ;
+- *Perceval ou le Conte du Graal* : 30 sections ;
+- *Tristan et Iseut* : 19 chapitres ;
+- *Les Voyages de Gulliver* : 36 chapitres ;
+- *Les Chroniques de Bucéphale* : livre live, 6 chapitres au moment du wrap.
+
+`conteur/scripts/audit_books.py` devient le contrôle obligatoire avant déploiement de nouveaux livres importés : nombre de chapitres attendu, chapitres trop courts, numérotation contiguë, bruit Wikisource.
+
+### 11/06/2026 — Bucéphale live miroir root → runtime applicatif
+
+Pour *Les Chroniques de Bucéphale*, l'application ne lit pas directement `/root/vault`. Un timer systemd root synchronise les chapitres vers `/srv/conteur/live/chroniques-de-bucephale`, lisible par le service applicatif.
+
+Unités validées :
+- `conteur-bucephale-sync.service` ;
+- `conteur-bucephale-sync.timer` ;
+- script `/usr/local/sbin/conteur-sync-bucephale`.
+
+### 11/06/2026 — Déploiement par rsync en préservant runtime local
+
+Tout déploiement vers `/srv/conteur/Bibliotheque-LLM-FR` doit préserver `.venv` et `.cache`, puis redémarrer `conteur.service`. Pattern :
+
+```bash
+rsync -a --delete --exclude .venv --exclude .cache ./ /srv/conteur/Bibliotheque-LLM-FR/
+sudo chown -R conteur:conteur /srv/conteur/Bibliotheque-LLM-FR
+sudo systemctl restart conteur.service
+```
+
 ### 11/06/2026 — Lecture roman fiable via Realtime Cedar V1, segments courts anticipés
 
 Le mode livre long (*L'île au trésor*) passe par OpenAI Realtime `gpt-realtime` + voix `cedar` V1, pas par l'endpoint Speech REST. La clé Reachy/Pollen récupérée via `HuggingFaceM4/gradium_setup` fonctionne pour Realtime mais pas pour `/v1/audio/speech` (`missing_scope api.model.audio.request`).
@@ -94,6 +142,10 @@ Stratégie cohérence : tant que la persona Douze ne change pas, tous les projet
 `MODE_HISTOIRE.md` (vision) + `README.md` (pointeur court) à la racine. Sous-projet `conteur/` a son propre wiki Karpathy complet (`CLAUDE.md`, `INDEX.md`, `STATE.md`, `DECISIONS.md`, `KNOWLEDGE_BASE.md`). DraCor corrigé 1560 → 1940 pièces, alerte licence NC commerciale documentée.
 
 ## ABANDONNÉ
+
+### 11/06/2026 — Accès direct de l'app non-root à `/root/vault`
+
+Abandonné pour ne pas fragiliser la sécurité Hetzner. Les contenus vivants sont exposés au conteur via miroir contrôlé dans `/srv/conteur/live/...`, pas par extension des permissions de l'utilisateur applicatif vers le vault root.
 
 ### 12/05/2026 SOIR — Scheduling at_byte / mapping transcript→bytes audio
 

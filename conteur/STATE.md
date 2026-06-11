@@ -1,5 +1,55 @@
 # STATE — conteur (Cedar storyteller)
 
+## Snapshot 11/06/2026 soir — production famille `conteur.eiffelai.io`
+
+### Livré
+
+- `https://conteur.eiffelai.io/` est en ligne sur Hetzner avec HTTPS, WSS, Basic Auth et Nginx reverse proxy.
+- Uvicorn/FastAPI tourne via `conteur.service` et bind uniquement `127.0.0.1:7860`.
+- Basic Auth user : `Galiléo`.
+- OpenAI Realtime `gpt-realtime` + voix `cedar` V1 est le seul chemin voix production.
+- Robot désactivé en production ; `/api/tts` legacy désactivé.
+- UI mobile Eiffel AI avec étagère `Lectures en cours`, menu bibliothèque à gauche, lecteur central, démarrer/reprendre, pause, stop, chapitre précédent/suivant, reprise depuis sélection.
+- Progression mémorisée par livre en `localStorage`, pour reprendre un autre jour.
+- *Les Chroniques de Bucéphale* est branché en live via miroir `/srv/conteur/live/chroniques-de-bucephale` et sync systemd toutes les minutes.
+
+### Livres disponibles
+
+- `ile-au-tresor` : 34 chapitres.
+- `lancelot-charrette` : 21 chapitres.
+- `yvain-chevalier-au-lion` : 23 sections.
+- `perceval-conte-du-graal` : 30 sections.
+- `tristan-et-iseut` : 19 chapitres.
+- `voyages-de-gulliver` : 36 chapitres.
+- `chroniques-de-bucephale` : live, 6 chapitres au moment du wrap.
+
+### P0 ouverts
+
+- Aucun P0 production ouvert au moment du wrap.
+
+### P0 résolus 11/06/2026
+
+- Accès public protégé : Basic Auth + HTTPS.
+- WebSocket Realtime derrière Nginx WSS.
+- Bind applicatif local-only.
+- Robot off en production.
+- `/api/tts` legacy off en production.
+- Bucéphale live sans accès direct non-root à `/root/vault`.
+- Import livres contrôlé par audit `conteur/scripts/audit_books.py`.
+
+### Risques restants
+
+- Faire encore un test familial Android long, 15-30 minutes, sur plusieurs livres.
+- Il n'y a pas encore de vérification automatique transcript-vers-source pour prouver que chaque mot lu correspond au texte exact.
+- Les anciens sujets théâtre/Reachy restent séparés : antennes, latence transcript/personnage, transcript mono-ligne.
+
+### Commandes de vérification utiles
+
+```bash
+ssh root@89.167.3.104 'systemctl is-active nginx; systemctl is-active conteur.service; systemctl is-active conteur-bucephale-sync.timer; curl -sS http://127.0.0.1:7860/api/library'
+ssh root@89.167.3.104 'cd /srv/conteur/Bibliotheque-LLM-FR; python3 conteur/scripts/audit_books.py'
+```
+
 ## Snapshot 11/06/2026 — lecteur roman Cedar V1 multi-segments
 
 ### Livré

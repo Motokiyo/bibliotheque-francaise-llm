@@ -17,6 +17,7 @@ Catalogue wiki conteur. À lire en premier dans toute nouvelle session.
 | Fichier | Rôle |
 |---|---|
 | `tools/analyze_trace.py` | Analyse les traces JSONL `/tmp/cedar-conteur-trace-*.jsonl` (auto-détection du plus récent), sort un rapport markdown : adaptive rate, schedule lookup health, délais apply_switch, transitions perso bout-en-bout, verdict global |
+| `scripts/audit_books.py` | Audit des livres importés avant déploiement : chapitres attendus, chapitres courts, numérotation contiguë, bruit Wikisource |
 
 ## Docs stratégiques
 
@@ -39,10 +40,19 @@ Détecteur perso : `dsp.py:detect_perso_with_pos` (regex stricte sur transcript_
 Profil DSP : `applyPersoProfile(persoName)` côté browser sur event `perso.active`.
 Antennes Reachy : `set_perso_antennas` côté serveur (asyncio.to_thread).
 
-## P0 / Suivant (au 11/06/2026)
+## Production active (au 11/06/2026 soir)
 
-1. Déployer le conteur sur un serveur accessible à la famille (pas Vercel statique pur) : Uvicorn persistant + HTTPS/WSS + code d'accès.
-2. Tester sur Android 15-20 minutes après déploiement.
+- URL : `https://conteur.eiffelai.io/`.
+- Serveur : Hetzner `89.167.3.104`.
+- App : `/srv/conteur/Bibliotheque-LLM-FR`.
+- Service : `conteur.service`, bind local `127.0.0.1:7860`.
+- Proxy : Nginx HTTPS/WSS + Basic Auth user `Galiléo`.
+- Voix : OpenAI Realtime `gpt-realtime` + `cedar` V1.
+
+## P0 / Suivant (au 11/06/2026 soir)
+
+1. Faire un test familial Android long, 15-30 minutes, sur plusieurs livres.
+2. Ajouter une vérification automatique transcript-vers-source si on veut prouver l'absence de saut de texte.
 3. Anciens P0 théâtre à reprendre ensuite : antennes, transcript mono-ligne, latence perso.
 
 ## Référence canonique externe
@@ -51,7 +61,7 @@ Antennes Reachy : `set_perso_antennas` côté serveur (asyncio.to_thread).
 - **MAP.md reachy_care** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/reachy_care/app/MAP.md`
 - **VOIX_CEDAR_MODE_HISTOIRE** : `/Users/alexandre/Territoire/Galaad-Motokiyo-Ferran/1 Projets/reachy_care/app/docs/VOIX_CEDAR_MODE_HISTOIRE.md`
 
-## Reprise demain
+## Reprise théâtre / Reachy
 
 Alex demande session en **mode plan** dédiée à comprendre :
 - Capture mic browser AudioWorklet 24kHz → WebSocket → OpenAI Realtime

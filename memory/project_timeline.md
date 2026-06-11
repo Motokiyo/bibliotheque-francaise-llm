@@ -58,3 +58,10 @@ Une ligne par événement marquant. `+` ajout/avancée, `-` blocage/abandon, `=`
 - `★` Enchaînement sans blanc : le segment suivant est demandé quand il reste environ 15 s d'audio local bufferisé, pas après silence complet.
 - `+` Test Playwright mobile 90 s : trois segments successifs du chapitre I (`0→776`, `776→1476`, `1476→2112`), statut `speaking`, progression sauvegardée.
 - `★` Déploiement pérenne : éviter Vercel statique/serverless pur. Cible : VPS/Fly.io/Render/Railway ou site existant avec backend persistant + proxy WebSocket + HTTPS + code d'accès.
+- `+` Déploiement final sur Hetzner : DNS `conteur.eiffelai.io -> 89.167.3.104`, HTTPS Let's Encrypt, Nginx WSS reverse proxy, Basic Auth, Uvicorn local-only `127.0.0.1:7860`, `conteur.service` actif.
+- `★` Sécurité production : Basic Auth user `Galiléo`, robot désactivé, `/api/tts` legacy désactivé, app sans accès direct à `/root/vault`.
+- `+` UI famille : design Eiffel AI responsive, étagère `Lectures en cours`, bascule entre livres, progression par livre, démarrer/reprendre, pause, stop, chapitres précédent/suivant, reprise depuis sélection.
+- `+` Bucéphale live : sync root vault → `/srv/conteur/live/chroniques-de-bucephale` via `conteur-bucephale-sync.timer`, bandeau nouveau chapitre côté app.
+- `+` Livres ajoutés/audités : *Lancelot*, *Yvain*, *Perceval*, *Tristan et Iseut*, *Les Voyages de Gulliver*, plus *L'île au trésor* et *Bucéphale* live.
+- `+` Script `conteur/scripts/audit_books.py` ajouté et exécuté côté serveur ; audit OK sur 6 livres publics importés.
+- `=` Wrap : production accessible à la famille, reste recommandé de faire un test Android long 15-30 min et d'ajouter un contrôle transcript-vers-source si besoin de preuve formelle anti-sauts.

@@ -33,6 +33,53 @@ Un site existant d'Alexandre peut héberger le conteur si son hébergement accep
 - `leparede.org` : serveur Apache/WordPress/Nextcloud, FTP connu mais SSH root refusé avec les clés disponibles ; pas retenir comme cible backend tant qu'un accès shell n'est pas confirmé.
 - Hetzner `89.167.3.104` : Nginx déjà présent sur 80/443, plusieurs services persistants actifs ; cible la plus réaliste pour `conteur.galaadmf.fr` ou `conteur.eiffelai.io` via DNS A + Nginx reverse proxy.
 
+### Production active 11/06/2026 : `conteur.eiffelai.io`
+
+Déploiement actif :
+- domaine : `https://conteur.eiffelai.io/` ;
+- DNS : `A conteur.eiffelai.io -> 89.167.3.104` ;
+- serveur : Hetzner `89.167.3.104` ;
+- app : `/srv/conteur/Bibliotheque-LLM-FR` ;
+- service : `conteur.service` ;
+- utilisateur systemd : `conteur` ;
+- bind Uvicorn : `127.0.0.1:7860` uniquement ;
+- env : `/etc/conteur/conteur.env` ;
+- auth : `/etc/nginx/.htpasswd-conteur`, user `Galiléo` ;
+- Nginx : HTTPS/WSS reverse proxy, écoute `89.167.3.104:443` explicitement car Tailscale possède 443 sur d'autres interfaces.
+
+Sécurité production :
+- ne pas ouvrir Uvicorn publiquement ;
+- ne pas donner à l'utilisateur `conteur` accès direct à `/root/vault` ;
+- robot Reachy désactivé ;
+- `/api/tts` legacy désactivé ;
+- garder Basic Auth devant UI + WebSocket.
+
+Déploiement sûr :
+```bash
+rsync -a --delete --exclude .venv --exclude .cache ./ /srv/conteur/Bibliotheque-LLM-FR/
+sudo chown -R conteur:conteur /srv/conteur/Bibliotheque-LLM-FR
+sudo systemctl restart conteur.service
+```
+
+### Livres et Bucéphale live
+
+Les livres publics importés doivent passer par `conteur/scripts/audit_books.py` avant déploiement. Le script contrôle le nombre de chapitres attendu, les chapitres courts, la numérotation contiguë et le bruit Wikisource.
+
+État audité 11/06/2026 :
+- `ile-au-tresor` : 34 chapitres, 407065 caractères ;
+- `lancelot-charrette` : 21 chapitres, 82790 caractères ;
+- `perceval-conte-du-graal` : 30 sections, 276475 caractères ;
+- `tristan-et-iseut` : 19 chapitres, 224926 caractères ;
+- `voyages-de-gulliver` : 36 chapitres, 484521 caractères ;
+- `yvain-chevalier-au-lion` : 23 sections, 212511 caractères.
+
+*Les Chroniques de Bucéphale* est un livre live. Source d'écriture côté vault root ; miroir runtime côté app :
+- source : `/root/vault/1 Projets/Chroniques-de-Bucéphale` ;
+- destination : `/srv/conteur/live/chroniques-de-bucephale` ;
+- timer : `conteur-bucephale-sync.timer` ;
+- service : `conteur-bucephale-sync.service` ;
+- script : `/usr/local/sbin/conteur-sync-bucephale`.
+
 ## §1 — OpenAI Realtime API
 
 ### Modèles
